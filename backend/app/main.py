@@ -8,11 +8,11 @@ from datetime import datetime
 import uuid
 
 from app.models.database import SessionLocal, engine, Base
-from app.api import rules, rubrics, projects, analysis
+from app.api import rules, rubrics, projects, analysis, datasets
 from app.services.file_processor import FileProcessor
 
 # Import all models to ensure they're registered with Base metadata
-from app.models import Rule, Rubric, RubricRule, Project, ExecutionRecord
+from app.models import Rule, Rubric, RubricRule, Project, ExecutionRecord, Dataset, DatasetColumn
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -45,6 +45,7 @@ app.include_router(rules.router, prefix="/api/rules", tags=["rules"])
 app.include_router(rubrics.router, prefix="/api/rubrics", tags=["rubrics"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+app.include_router(datasets.router, prefix="/api/datasets", tags=["datasets"])
 
 @app.get("/")
 async def root():

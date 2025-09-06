@@ -4,5 +4,6 @@ from .rubric import Rubric
 from .rubric_rule import RubricRule
 from .project import Project
 from .execution_record import ExecutionRecord
+from .dataset import Dataset, DatasetColumn
 
-__all__ = ["Rule", "Rubric", "RubricRule", "Project", "ExecutionRecord"]
+__all__ = ["Rule", "Rubric", "RubricRule", "Project", "ExecutionRecord", "Dataset", "DatasetColumn"]
