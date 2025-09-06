@@ -6,7 +6,7 @@ from datetime import datetime
 class Rule(Base):
     __tablename__ = "rules"
     
-    id = Column(UUIDType, primary_key=True, default=lambda: uuid.uuid4().hex)
+    id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     owner_name = Column(String(255))

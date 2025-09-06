@@ -6,8 +6,8 @@ from datetime import datetime
 class ExecutionRecord(Base):
     __tablename__ = "execution_records"
     
-    id = Column(UUIDType, primary_key=True, default=lambda: uuid.uuid4().hex)
-    project_id = Column(UUIDType, ForeignKey("projects.id"), nullable=False)
+    id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
+    project_id = Column(String(32), ForeignKey("projects.id"), nullable=False)
     execution_type = Column(String(50), nullable=False)  # "rule" or "rubric"
     executed_items = Column(JSON, default=list)  # IDs of rules or rubrics executed
     execution_date = Column(DateTime, default=datetime.utcnow)

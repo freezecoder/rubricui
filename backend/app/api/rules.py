@@ -9,7 +9,7 @@ import uuid
 
 router = APIRouter()
 
-@router.post("/", response_model=RuleResponse)
+@router.post("", response_model=RuleResponse)
 async def create_rule(rule: RuleCreate, db: Session = Depends(get_db)):
     db_rule = Rule(**rule.dict())
     db.add(db_rule)
@@ -17,7 +17,7 @@ async def create_rule(rule: RuleCreate, db: Session = Depends(get_db)):
     db.refresh(db_rule)
     return db_rule
 
-@router.get("/", response_model=List[RuleResponse])
+@router.get("", response_model=List[RuleResponse])
 async def list_rules(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     rules = db.query(Rule).filter(Rule.is_active == True).offset(skip).limit(limit).all()
     return rules
