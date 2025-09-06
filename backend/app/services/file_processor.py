@@ -2,10 +2,32 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Any, Union
 import os
+import json
 
 class FileProcessor:
     def __init__(self):
         self.supported_extensions = ['.xlsx', '.xls', '.csv']
+    
+    def _clean_data_for_json(self, data: Any) -> Any:
+        """
+        Clean data to make it JSON serializable by handling NaN, infinity, and other problematic values
+        """
+        if isinstance(data, dict):
+            return {key: self._clean_data_for_json(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._clean_data_for_json(item) for item in data]
+        elif isinstance(data, (np.floating, float)):
+            if pd.isna(data) or np.isinf(data):
+                return None
+            return float(data)
+        elif isinstance(data, (np.integer, int)):
+            return int(data)
+        elif isinstance(data, (np.bool_, bool)):
+            return bool(data)
+        elif isinstance(data, str):
+            return str(data)
+        else:
+            return data
     
     def validate_file(self, file_path: str) -> Dict[str, Any]:
         """Validate file structure and return basic info"""
@@ -71,11 +93,15 @@ class FileProcessor:
             # Limit rows for preview
             preview_df = df.head(max_rows)
             
+            # Convert to dict and clean for JSON serialization
+            raw_data = preview_df.to_dict('records')
+            cleaned_data = self._clean_data_for_json(raw_data)
+            
             return {
                 "total_rows": len(df),
                 "preview_rows": len(preview_df),
                 "columns": list(preview_df.columns),
-                "data": preview_df.to_dict('records'),
+                "data": cleaned_data,
                 "column_types": {col: str(dtype) for col, dtype in preview_df.dtypes.items()}
             }
             
@@ -116,24 +142,45 @@ class FileProcessor:
             "name": column_name,
             "type": str(col_data.dtype),
             "count": len(col_data),
-            "null_count": col_data.isnull().sum(),
-            "null_percentage": (col_data.isnull().sum() / len(col_data)) * 100
+            "null_count": int(col_data.isnull().sum()),
+            "null_percentage": float((col_data.isnull().sum() / len(col_data)) * 100)
         }
         
         if pd.api.types.is_numeric_dtype(col_data):
-            stats.update({
-                "min": float(col_data.min()),
-                "max": float(col_data.max()),
-                "mean": float(col_data.mean()),
-                "median": float(col_data.median()),
-                "std": float(col_data.std()),
-                "q25": float(col_data.quantile(0.25)),
-                "q75": float(col_data.quantile(0.75))
-            })
+            # Handle numeric statistics with proper NaN/infinity handling
+            numeric_stats = {}
+            
+            # Min/Max
+            col_min = col_data.min()
+            col_max = col_data.max()
+            numeric_stats["min"] = None if pd.isna(col_min) else float(col_min)
+            numeric_stats["max"] = None if pd.isna(col_max) else float(col_max)
+            
+            # Mean/Median
+            col_mean = col_data.mean()
+            col_median = col_data.median()
+            numeric_stats["mean"] = None if pd.isna(col_mean) else float(col_mean)
+            numeric_stats["median"] = None if pd.isna(col_median) else float(col_median)
+            
+            # Standard deviation
+            col_std = col_data.std()
+            numeric_stats["std"] = None if pd.isna(col_std) else float(col_std)
+            
+            # Quantiles
+            try:
+                q25 = col_data.quantile(0.25)
+                q75 = col_data.quantile(0.75)
+                numeric_stats["q25"] = None if pd.isna(q25) else float(q25)
+                numeric_stats["q75"] = None if pd.isna(q75) else float(q75)
+            except:
+                numeric_stats["q25"] = None
+                numeric_stats["q75"] = None
+            
+            stats.update(numeric_stats)
         else:
             stats.update({
-                "unique_values": col_data.nunique(),
-                "top_values": col_data.value_counts().head(10).to_dict()
+                "unique_values": int(col_data.nunique()),
+                "top_values": self._clean_data_for_json(col_data.value_counts().head(10).to_dict())
             })
         
-        return stats
+        return self._clean_data_for_json(stats)

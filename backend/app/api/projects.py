@@ -86,3 +86,62 @@ async def preview_project_data(project_id: uuid.UUID, db: Session = Depends(get_
         return preview
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+@router.get("/{project_id}/datasets")
+async def list_project_datasets(project_id: uuid.UUID, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    datasets = []
+    if project.input_data_file and os.path.exists(project.input_data_file):
+        file_stats = os.stat(project.input_data_file)
+        file_size = file_stats.st_size
+        file_size_mb = round(file_size / (1024 * 1024), 2)
+        
+        datasets.append({
+            "id": "1",
+            "name": os.path.basename(project.input_data_file).replace('.xlsx', '').replace('.xls', ''),
+            "filename": os.path.basename(project.input_data_file),
+            "file_path": project.input_data_file,
+            "size": f"{file_size_mb} MB",
+            "upload_date": project.created_date.isoformat(),
+            "status": "ready"
+        })
+    
+    return datasets
+
+@router.delete("/{project_id}/datasets/{dataset_id}")
+async def delete_project_dataset(
+    project_id: uuid.UUID, 
+    dataset_id: str, 
+    db: Session = Depends(get_db)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # For now, we only support one dataset per project
+    if dataset_id == "1" and project.input_data_file:
+        # Remove the file
+        if os.path.exists(project.input_data_file):
+            os.remove(project.input_data_file)
+        
+        # Clear the file path from the project
+        project.input_data_file = None
+        db.commit()
+        
+        return {"message": "Dataset deleted successfully"}
+    
+    raise HTTPException(status_code=404, detail="Dataset not found")
+
+@router.get("/{project_id}/analysis-history")
+async def get_analysis_history(project_id: uuid.UUID, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {
+        "execution_history": project.execution_history or [],
+        "total_analyses": len(project.execution_history or [])
+    }

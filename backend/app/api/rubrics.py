@@ -44,7 +44,7 @@ async def update_rubric(rubric_id: str, rubric_update: RubricCreate, db: Session
     return rubric
 
 @router.delete("/{rubric_id}")
-async def delete_rubric(rubric_id: uuid.UUID, db: Session = Depends(get_db)):
+async def delete_rubric(rubric_id: str, db: Session = Depends(get_db)):
     rubric = db.query(Rubric).filter(Rubric.id == rubric_id, Rubric.is_active == True).first()
     if not rubric:
         raise HTTPException(status_code=404, detail="Rubric not found")
@@ -55,7 +55,7 @@ async def delete_rubric(rubric_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.post("/{rubric_id}/rules")
 async def add_rule_to_rubric(
-    rubric_id: uuid.UUID, 
+    rubric_id: str, 
     rule_data: RubricRuleCreate, 
     db: Session = Depends(get_db)
 ):
@@ -81,8 +81,34 @@ async def add_rule_to_rubric(
     db.refresh(rubric_rule)
     return rubric_rule
 
+@router.get("/{rubric_id}/rules")
+async def get_rubric_rules(rubric_id: str, db: Session = Depends(get_db)):
+    from app.models.rule import Rule
+    
+    rubric_rules = db.query(RubricRule).filter(
+        RubricRule.rubric_id == rubric_id,
+        RubricRule.is_active == True
+    ).order_by(RubricRule.order_index).all()
+    
+    # Get the associated rules
+    result = []
+    for rubric_rule in rubric_rules:
+        rule = db.query(Rule).filter(Rule.id == rubric_rule.rule_id, Rule.is_active == True).first()
+        if rule:
+            result.append({
+                "id": rubric_rule.id,
+                "rubric_id": rubric_rule.rubric_id,
+                "rule_id": rubric_rule.rule_id,
+                "weight": rubric_rule.weight,
+                "order_index": rubric_rule.order_index,
+                "is_active": rubric_rule.is_active,
+                "rule": rule
+            })
+    
+    return result
+
 @router.delete("/{rubric_id}/rules/{rule_id}")
-async def remove_rule_from_rubric(rubric_id: uuid.UUID, rule_id: uuid.UUID, db: Session = Depends(get_db)):
+async def remove_rule_from_rubric(rubric_id: str, rule_id: str, db: Session = Depends(get_db)):
     rubric_rule = db.query(RubricRule).filter(
         RubricRule.rubric_id == rubric_id,
         RubricRule.rule_id == rule_id

@@ -65,15 +65,30 @@ class DatasetProcessor:
         elif pd.api.types.is_numeric_dtype(series):
             column_stats['column_type'] = 'numeric'
             
-            # Calculate numeric statistics
+            # Calculate numeric statistics with proper NaN/infinity handling
             numeric_series = pd.to_numeric(series, errors='coerce')
-            column_stats.update({
-                'mean_value': float(numeric_series.mean()) if not numeric_series.empty else None,
-                'median_value': float(numeric_series.median()) if not numeric_series.empty else None,
-                'min_value': float(numeric_series.min()) if not numeric_series.empty else None,
-                'max_value': float(numeric_series.max()) if not numeric_series.empty else None,
-                'std_deviation': float(numeric_series.std()) if not numeric_series.empty else None
-            })
+            if not numeric_series.empty:
+                mean_val = numeric_series.mean()
+                median_val = numeric_series.median()
+                min_val = numeric_series.min()
+                max_val = numeric_series.max()
+                std_val = numeric_series.std()
+                
+                column_stats.update({
+                    'mean_value': None if pd.isna(mean_val) else float(mean_val),
+                    'median_value': None if pd.isna(median_val) else float(median_val),
+                    'min_value': None if pd.isna(min_val) else float(min_val),
+                    'max_value': None if pd.isna(max_val) else float(max_val),
+                    'std_deviation': None if pd.isna(std_val) else float(std_val)
+                })
+            else:
+                column_stats.update({
+                    'mean_value': None,
+                    'median_value': None,
+                    'min_value': None,
+                    'max_value': None,
+                    'std_deviation': None
+                })
         else:
             column_stats['column_type'] = 'string'
             
