@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import TypeDecorator, CHAR
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import uuid
 
@@ -26,7 +27,10 @@ class UUIDType(TypeDecorator):
         return uuid.UUID(hex=value)
 
 # Use SQLite3 for development (no PostgreSQL required)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./rubrics.db")
+# Ensure database is always in the backend folder with absolute path
+# Get the absolute path to the database file
+db_path = Path(__file__).parent.parent.parent / "backend" / "rubrics.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{db_path.absolute()}")
 
 # For SQLite, we don't need psycopg2-specific arguments
 if "sqlite" in DATABASE_URL:

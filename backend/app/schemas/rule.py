@@ -13,6 +13,8 @@ class RuleCreate(BaseModel):
     ruleset_conditions: List[str]
     column_mapping: Dict[str, str]
     weight: float = 1.0
+    visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
+    enabled: bool = True
 
 class RuleResponse(BaseModel):
     id: str  # Changed from uuid.UUID to str for SQLite compatibility
@@ -28,6 +30,14 @@ class RuleResponse(BaseModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool
+    visibility: str
+    enabled: bool
 
     class Config:
         from_attributes = True
+
+class RuleAdminUpdate(BaseModel):
+    """Schema for admin updates to rule visibility and enabled status"""
+    visibility: Optional[str] = Field(None, pattern="^(public|private|hidden)$")
+    enabled: Optional[bool] = None
+    is_active: Optional[bool] = None

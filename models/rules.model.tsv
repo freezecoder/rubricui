@@ -1,0 +1,12 @@
+name,rulesetDesc,ruleset,column_mapping_to_ruleset
+magnitude_expr_median,Expression Magnitude (Median),,list(x=e$gene_table$tcga_expr_percentile_rank)
+ChinaChoice_LUSC_TvsN,China CHOICE DE: Tumor vs Normal (SQ),,"list(x=e$gene_table$chinaChoice_logfc,y=e$gene_table$chinaChoice_pval)"
+scrna_GSE127465_de,scRNA GSE127465 Differential expression,,"list(x=e$gene_table$scrna_GSE127465_logfc,pval=e$gene_table$scrna_GSE127465_logfc)"
+scrna_GSE148071_de,scRNA GSE148071 Differential expression,,"list(x=e$gene_table$scrna_GSE148071_logfc,pval=e$gene_table$scrna_GSE148071_pval)"
+logfc_pval_cptac_proteomics,CPTAC Proteomics DE,,"list(x=e$gene_table$cptac_logfc,y=e$gene_table$cptac_padj)"
+logfc_pval_lusc_tumor_vs_norm,LogFC change and pval LUSC Tumor vs Norm Adjacent,,"list(logFC=e$gene_table$log_fc, pval=e$gene_table$adj_p_val)"
+gtex_rank_diff_percentile,TCGA vs GTEx Rank Percentile LUSC vs Lung,,list(x=e$gene_table$gtex_rank_difference_percentile)
+gtex_norm_expr_median,GTEx Critical Normal Expression Median (log2 CPM),,list(x=e$gene_table$median_all_critical)
+key_tissue,"Key Tissue (Liver, Heart, etc.)",,list(x=e$gene_table$is_top_key)
+sq_depmap_vs_otherlung,Depmap Lung Squamous vs Other Lung CR24Q2CHRONOSLung,,"list(x=e$gene_table$vsother_diffmeans, pval=e$gene_table$vsother_pval)"
+sq_depmap_vs_solid_epithelial,Depmap Lung Squamous vs Solid Epithelial CR24Q2CHRONOSLung,,"list(x=e$gene_table$vsolid_diffmeans, pval=e$gene_table$vsolid_pval)"

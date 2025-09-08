@@ -138,7 +138,7 @@ def load_rules_from_txt(file_path):
 def create_example_rubric(db: Session, rule_ids):
     """Create an example rubric with the loaded rules"""
     rubric = Rubric(
-        id=uuid.uuid4(),
+        id=uuid.uuid4().hex,
         name="LUSC Complete Analysis Rubric",
         description="Complete rubric for LUSC analysis using all available rules",
         owner_name="System",
@@ -205,7 +205,7 @@ def main():
         # Create a project with the example data
         from app.models.project import Project
         project = Project(
-            id=uuid.uuid4(),
+            id=uuid.uuid4().hex,
             name="LUSC Example Analysis",
             description="Example project using LUSC data and complete rule set",
             owner_name="System",

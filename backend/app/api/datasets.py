@@ -6,10 +6,12 @@ import shutil
 from pathlib import Path
 
 from app.models.database import get_db
-from app.models.dataset import Dataset, DatasetColumn
+from app.models.dataset import Dataset, DatasetColumn, DatasetHistogram
 from app.schemas.dataset import (
     DatasetCreate, DatasetResponse, DatasetSummary, DatasetStats,
-    DatasetColumnResponse, DatasetAnalysisRequest
+    DatasetColumnResponse, DatasetAnalysisRequest, DatasetAdminUpdate,
+    DatasetHistogramResponse, DatasetHistogramSummary, DatasetHistogramWithColumn,
+    DatasetHistogramRequest
 )
 from app.services.dataset_processor import DatasetProcessor
 
@@ -75,6 +77,16 @@ async def create_dataset(
         db.commit()
         db.refresh(dataset)
         
+        # Generate histograms for numeric columns
+        try:
+            histograms = dataset_processor.process_histograms_after_upload(db, dataset.id)
+            if histograms:
+                db.commit()
+                print(f"Generated {len(histograms)} histograms for dataset {dataset.id}")
+        except Exception as e:
+            print(f"Warning: Failed to generate histograms for dataset {dataset.id}: {e}")
+            # Don't fail the upload if histogram generation fails
+        
         # Load columns for response
         db.refresh(dataset)
         return dataset
@@ -94,11 +106,25 @@ async def list_datasets(
     owner_name: Optional[str] = Query(None),
     disease_area_study: Optional[str] = Query(None),
     tags: Optional[str] = Query(None),
+    visibility: Optional[str] = Query(None, description="Filter by visibility: public, private, hidden"),
+    enabled: Optional[bool] = Query(None, description="Filter by enabled status"),
+    admin_view: bool = Query(False, description="Include all datasets regardless of visibility (admin only)"),
     db: Session = Depends(get_db)
 ):
     """List all datasets with optional filtering"""
     
     query = db.query(Dataset)
+    
+    # Apply visibility and enabled filters (unless admin view)
+    if not admin_view:
+        query = query.filter(Dataset.visibility == "public")
+        query = query.filter(Dataset.enabled == True)
+    else:
+        # Admin view - apply filters if specified
+        if visibility:
+            query = query.filter(Dataset.visibility == visibility)
+        if enabled is not None:
+            query = query.filter(Dataset.enabled == enabled)
     
     # Apply filters
     if organization:
@@ -117,10 +143,21 @@ async def list_datasets(
     return datasets
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
-async def get_dataset(dataset_id: str, db: Session = Depends(get_db)):
+async def get_dataset(
+    dataset_id: str, 
+    admin_view: bool = Query(False, description="Include hidden datasets (admin only)"),
+    db: Session = Depends(get_db)
+):
     """Get a specific dataset by ID"""
     
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    query = db.query(Dataset).filter(Dataset.id == dataset_id)
+    
+    # Apply visibility filter unless admin view
+    if not admin_view:
+        query = query.filter(Dataset.visibility == "public")
+        query = query.filter(Dataset.enabled == True)
+    
+    dataset = query.first()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
@@ -230,6 +267,26 @@ async def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting dataset: {str(e)}")
 
+@router.patch("/{dataset_id}/admin", response_model=DatasetResponse)
+async def admin_update_dataset(dataset_id: str, admin_update: DatasetAdminUpdate, db: Session = Depends(get_db)):
+    """Admin endpoint to update dataset visibility and enabled status"""
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Update only the fields provided in the admin update
+    update_data = admin_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(dataset, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(dataset)
+        return dataset
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating dataset: {str(e)}")
+
 @router.put("/{dataset_id}", response_model=DatasetResponse)
 async def update_dataset(
     dataset_id: str,
@@ -268,3 +325,146 @@ async def update_dataset(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating dataset: {str(e)}")
+
+# Histogram endpoints
+
+@router.get("/{dataset_id}/histograms", response_model=List[DatasetHistogramSummary])
+async def get_dataset_histograms(
+    dataset_id: str,
+    column_id: Optional[str] = Query(None, description="Filter by specific column ID"),
+    db: Session = Depends(get_db)
+):
+    """Get all histograms for a dataset"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    query = db.query(DatasetHistogram).filter(DatasetHistogram.dataset_id == dataset_id)
+    
+    if column_id:
+        query = query.filter(DatasetHistogram.column_id == column_id)
+    
+    histograms = query.order_by(DatasetHistogram.created_date.desc()).all()
+    return histograms
+
+@router.get("/{dataset_id}/histograms/{histogram_id}", response_model=DatasetHistogramWithColumn)
+async def get_histogram(
+    dataset_id: str,
+    histogram_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get a specific histogram with column information"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Get histogram
+    histogram = db.query(DatasetHistogram).filter(
+        DatasetHistogram.id == histogram_id,
+        DatasetHistogram.dataset_id == dataset_id
+    ).first()
+    
+    if not histogram:
+        raise HTTPException(status_code=404, detail="Histogram not found")
+    
+    # Get column information
+    column = db.query(DatasetColumn).filter(DatasetColumn.id == histogram.column_id).first()
+    if not column:
+        raise HTTPException(status_code=404, detail="Column not found")
+    
+    return DatasetHistogramWithColumn(
+        histogram=histogram,
+        column=column
+    )
+
+@router.post("/{dataset_id}/histograms/generate", response_model=List[DatasetHistogramResponse])
+async def generate_histograms(
+    dataset_id: str,
+    request: DatasetHistogramRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate histograms for numeric columns in a dataset"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    try:
+        # Generate histograms
+        histograms = dataset_processor.generate_histograms_for_dataset(
+            db, dataset_id, request.bin_count, request.column_ids
+        )
+        
+        # Save to database
+        for histogram in histograms:
+            db.add(histogram)
+        
+        db.commit()
+        
+        # Refresh histograms to get IDs
+        for histogram in histograms:
+            db.refresh(histogram)
+        
+        return histograms
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error generating histograms: {str(e)}")
+
+@router.delete("/{dataset_id}/histograms/{histogram_id}")
+async def delete_histogram(
+    dataset_id: str,
+    histogram_id: str,
+    db: Session = Depends(get_db)
+):
+    """Delete a specific histogram"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Get histogram
+    histogram = db.query(DatasetHistogram).filter(
+        DatasetHistogram.id == histogram_id,
+        DatasetHistogram.dataset_id == dataset_id
+    ).first()
+    
+    if not histogram:
+        raise HTTPException(status_code=404, detail="Histogram not found")
+    
+    try:
+        db.delete(histogram)
+        db.commit()
+        return {"message": "Histogram deleted successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting histogram: {str(e)}")
+
+@router.delete("/{dataset_id}/histograms")
+async def delete_all_histograms(
+    dataset_id: str,
+    db: Session = Depends(get_db)
+):
+    """Delete all histograms for a dataset"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    try:
+        # Delete all histograms for this dataset
+        db.query(DatasetHistogram).filter(DatasetHistogram.dataset_id == dataset_id).delete()
+        db.commit()
+        return {"message": "All histograms deleted successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting histograms: {str(e)}")

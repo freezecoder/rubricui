@@ -54,6 +54,8 @@ class DatasetCreate(BaseModel):
     organization: Optional[str] = None
     disease_area_study: Optional[str] = None
     tags: Optional[str] = None  # Comma-separated tags
+    visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
+    enabled: bool = True
 
 class DatasetUpload(BaseModel):
     """Schema for dataset upload with file information"""
@@ -64,6 +66,8 @@ class DatasetUpload(BaseModel):
     disease_area_study: Optional[str] = None
     tags: Optional[str] = None
     filename: str = Field(..., min_length=1)
+    visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
+    enabled: bool = True
 
 class DatasetResponse(BaseModel):
     id: str
@@ -90,6 +94,10 @@ class DatasetResponse(BaseModel):
     created_date: datetime
     modified_date: datetime
     
+    # Admin control attributes
+    visibility: str
+    enabled: bool
+    
     # Relationships
     columns: List[DatasetColumnResponse] = []
 
@@ -113,6 +121,8 @@ class DatasetSummary(BaseModel):
     num_score_columns: int
     created_date: datetime
     modified_date: datetime
+    visibility: str
+    enabled: bool
 
     class Config:
         from_attributes = True
@@ -132,3 +142,63 @@ class DatasetAnalysisRequest(BaseModel):
     include_column_stats: bool = True
     include_data_preview: bool = False
     preview_rows: int = 10
+
+class DatasetAdminUpdate(BaseModel):
+    """Schema for admin updates to dataset visibility and enabled status"""
+    visibility: Optional[str] = Field(None, pattern="^(public|private|hidden)$")
+    enabled: Optional[bool] = None
+
+class DatasetHistogramCreate(BaseModel):
+    """Schema for creating histogram data"""
+    dataset_id: str = Field(..., min_length=1, max_length=32)
+    column_id: str = Field(..., min_length=1, max_length=32)
+    bin_count: int = Field(..., ge=1, le=1000)
+    bin_edges: List[float] = Field(..., min_items=2)
+    bin_counts: List[int] = Field(..., min_items=1)
+    min_value: float
+    max_value: float
+    total_count: int = Field(..., ge=0)
+    null_count: int = Field(default=0, ge=0)
+
+class DatasetHistogramResponse(BaseModel):
+    """Schema for histogram API responses"""
+    id: str
+    dataset_id: str
+    column_id: str
+    bin_count: int
+    bin_edges: List[float]
+    bin_counts: List[int]
+    min_value: float
+    max_value: float
+    total_count: int
+    null_count: int
+    created_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class DatasetHistogramSummary(BaseModel):
+    """Lightweight histogram summary for lists"""
+    id: str
+    column_id: str
+    bin_count: int
+    min_value: float
+    max_value: float
+    total_count: int
+    null_count: int
+    created_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class DatasetHistogramWithColumn(BaseModel):
+    """Histogram response with column information"""
+    histogram: DatasetHistogramResponse
+    column: DatasetColumnResponse
+
+class DatasetHistogramRequest(BaseModel):
+    """Request for histogram generation"""
+    dataset_id: str
+    column_ids: Optional[List[str]] = None  # If None, generate for all numeric columns
+    bin_count: int = Field(default=30, ge=5, le=100)  # Default to 30 bins
+    force_regenerate: bool = Field(default=False)  # Force regeneration even if exists

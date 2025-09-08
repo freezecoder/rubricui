@@ -14,6 +14,8 @@ class RubricCreate(BaseModel):
     organization: Optional[str] = None
     disease_area_study: Optional[str] = None
     tags: Optional[List[str]] = []
+    visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
+    enabled: bool = True
 
 class RubricResponse(BaseModel):
     id: str  # Changed from uuid.UUID to str for SQLite compatibility
@@ -26,6 +28,14 @@ class RubricResponse(BaseModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool
+    visibility: str
+    enabled: bool
 
     class Config:
         from_attributes = True
+
+class RubricAdminUpdate(BaseModel):
+    """Schema for admin updates to rubric visibility and enabled status"""
+    visibility: Optional[str] = Field(None, pattern="^(public|private|hidden)$")
+    enabled: Optional[bool] = None
+    is_active: Optional[bool] = None

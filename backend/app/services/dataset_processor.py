@@ -6,8 +6,8 @@ import re
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 from sqlalchemy.orm import Session
-from app.models.dataset import Dataset, DatasetColumn
-from app.schemas.dataset import DatasetCreate, DatasetColumnCreate
+from app.models.dataset import Dataset, DatasetColumn, DatasetHistogram
+from app.schemas.dataset import DatasetCreate, DatasetColumnCreate, DatasetHistogramCreate
 import uuid
 from datetime import datetime
 
@@ -55,8 +55,8 @@ class DatasetProcessor:
             'original_name': column_name,
             'sanitized_name': self.sanitize_column_name(column_name),
             'column_type': 'unknown',
-            'null_count': series.isnull().sum(),
-            'unique_count': series.nunique()
+            'null_count': int(series.isnull().sum()),
+            'unique_count': int(series.nunique())
         }
         
         # Determine column type
@@ -102,6 +102,96 @@ class DatasetProcessor:
                 })
         
         return column_stats
+    
+    def calculate_histogram(self, series: pd.Series, bin_count: int = 30) -> Dict[str, Any]:
+        """
+        Calculate histogram for a numeric series
+        """
+        # Convert to numeric, handling non-numeric values
+        numeric_series = pd.to_numeric(series, errors='coerce')
+        
+        # Remove NaN values for histogram calculation
+        clean_series = numeric_series.dropna()
+        
+        if len(clean_series) == 0:
+            # No valid numeric data
+            return {
+                'bin_count': 0,
+                'bin_edges': [],
+                'bin_counts': [],
+                'min_value': 0.0,
+                'max_value': 0.0,
+                'total_count': 0,
+                'null_count': len(series)
+            }
+        
+        # Calculate histogram
+        counts, bin_edges = np.histogram(clean_series, bins=bin_count)
+        
+        return {
+            'bin_count': len(counts),
+            'bin_edges': bin_edges.tolist(),
+            'bin_counts': counts.tolist(),
+            'min_value': float(clean_series.min()),
+            'max_value': float(clean_series.max()),
+            'total_count': len(clean_series),
+            'null_count': len(series) - len(clean_series)
+        }
+    
+    def generate_histograms_for_dataset(self, db: Session, dataset_id: str, bin_count: int = 30, 
+                                      column_ids: Optional[List[str]] = None) -> List[DatasetHistogram]:
+        """
+        Generate histograms for numeric columns in a dataset
+        """
+        # Load the dataset
+        df = self.load_dataset(dataset_id)
+        
+        # Get numeric columns from database
+        query = db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == dataset_id,
+            DatasetColumn.column_type.in_(['numeric', 'score'])
+        )
+        
+        if column_ids:
+            query = query.filter(DatasetColumn.id.in_(column_ids))
+        
+        numeric_columns = query.all()
+        
+        histograms = []
+        for column in numeric_columns:
+            # Check if histogram already exists
+            existing_histogram = db.query(DatasetHistogram).filter(
+                DatasetHistogram.dataset_id == dataset_id,
+                DatasetHistogram.column_id == column.id
+            ).first()
+            
+            if existing_histogram:
+                # Skip if histogram already exists (unless force_regenerate is True)
+                continue
+            
+            # Get the column data
+            column_data = df[column.original_name]
+            
+            # Calculate histogram
+            histogram_data = self.calculate_histogram(column_data, bin_count)
+            
+            # Create histogram record
+            histogram = DatasetHistogram(
+                id=uuid.uuid4().hex,
+                dataset_id=dataset_id,
+                column_id=column.id,
+                bin_count=histogram_data['bin_count'],
+                bin_edges=histogram_data['bin_edges'],
+                bin_counts=histogram_data['bin_counts'],
+                min_value=histogram_data['min_value'],
+                max_value=histogram_data['max_value'],
+                total_count=histogram_data['total_count'],
+                null_count=histogram_data['null_count']
+            )
+            
+            histograms.append(histogram)
+        
+        return histograms
     
     def process_file(self, file_path: str, dataset_info: DatasetCreate) -> Tuple[Dataset, List[DatasetColumn]]:
         """
@@ -189,6 +279,19 @@ class DatasetProcessor:
             columns.append(column)
         
         return dataset, columns
+    
+    def process_histograms_after_upload(self, db: Session, dataset_id: str, bin_count: int = 30) -> List[DatasetHistogram]:
+        """
+        Process histograms for a dataset after it has been uploaded and saved to database
+        This should be called after the dataset and columns have been committed to the database
+        """
+        histograms = self.generate_histograms_for_dataset(db, dataset_id, bin_count)
+        
+        # Save histograms to database
+        for histogram in histograms:
+            db.add(histogram)
+        
+        return histograms
     
     def load_dataset(self, dataset_id: str) -> pd.DataFrame:
         """

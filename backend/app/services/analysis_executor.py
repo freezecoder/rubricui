@@ -15,7 +15,8 @@ class AnalysisExecutor:
         self, 
         individual_rules: List[Rule], 
         rubrics: List[Rubric], 
-        dataset: pd.DataFrame
+        dataset: pd.DataFrame,
+        rubric_rules_map: Dict[str, List] = None
     ) -> pd.DataFrame:
         """Execute combination of individual rules and rubrics on dataset"""
         
@@ -36,9 +37,10 @@ class AnalysisExecutor:
         # Execute rubrics
         for rubric in rubrics:
             rubric_scores = []
+            rubric_rules = rubric_rules_map.get(str(rubric.id), []) if rubric_rules_map else None
             for _, row in dataset.iterrows():
                 row_dict = row.to_dict()
-                score = self.rubric_engine.execute_rubric(rubric, row_dict)
+                score = self.rubric_engine.execute_rubric(rubric, row_dict, rubric_rules)
                 rubric_scores.append(score)
             
             # Add rubric scores as new column
@@ -65,10 +67,46 @@ class AnalysisExecutor:
     def execute_rubrics_only(
         self, 
         rubrics: List[Rubric], 
-        dataset: pd.DataFrame
+        dataset: pd.DataFrame,
+        rubric_rules_map: Dict[str, List] = None
     ) -> pd.DataFrame:
         """Execute only rubrics"""
-        return self.execute_mixed_analysis([], rubrics, dataset)
+        return self.execute_mixed_analysis([], rubrics, dataset, rubric_rules_map)
+    
+    def execute_rubric_with_excel_output(
+        self, 
+        rubric: Rubric, 
+        dataset: pd.DataFrame,
+        rubric_rules: List = None,
+        output_file: str = None
+    ) -> pd.DataFrame:
+        """Execute a single rubric and create Excel output with two sheets"""
+        # Execute rubric without weights
+        results_df = self.rubric_engine.execute_rubric_on_dataset_no_weights(rubric, dataset, rubric_rules)
+        
+        if output_file:
+            # Create Excel writer
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # Sheet 1: Gene scores only (gene identifier + individual rule scores + total score)
+                score_columns = [col for col in results_df.columns if col.endswith('_SCORE')]
+                gene_id_columns = ['gene_symbol', 'ensg_id'] if 'gene_symbol' in results_df.columns else ['ensg_id'] if 'ensg_id' in results_df.columns else []
+                
+                # Create gene scores sheet
+                gene_scores_df = results_df[gene_id_columns + score_columns].copy()
+                gene_scores_df.to_excel(writer, sheet_name='Gene_Scores', index=False)
+                
+                # Sheet 2: Full data joined with scores
+                results_df.to_excel(writer, sheet_name='Data_with_Scores', index=False)
+        
+        return results_df
+    
+    def execute_rules_analysis(
+        self, 
+        rules: List[Rule], 
+        dataset: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Execute individual rules analysis (alias for execute_individual_rules_only)"""
+        return self.execute_individual_rules_only(rules, dataset)
     
     def get_analysis_summary(self, results_df: pd.DataFrame) -> Dict[str, Any]:
         """Get summary statistics for analysis results"""

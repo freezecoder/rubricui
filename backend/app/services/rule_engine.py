@@ -14,6 +14,12 @@ class RuleEngine:
             condition_part = condition_part.strip()
             score_part = score_part.strip()
             
+            # Remove extra quotes if present
+            if condition_part.startswith('"') and condition_part.endswith('"'):
+                condition_part = condition_part[1:-1]
+            if score_part.startswith('"') and score_part.endswith('"'):
+                score_part = score_part[1:-1]
+            
             # Handle NA_real_ case
             if score_part == "NA_real_":
                 score = np.nan
@@ -34,11 +40,44 @@ class RuleEngine:
             for key, value in data.items():
                 if isinstance(value, str):
                     condition = condition.replace(key, f"'{value}'")
+                elif pd.isna(value) or (isinstance(value, float) and np.isnan(value)):
+                    # Handle NaN values - any comparison with NaN should return False
+                    # Replace the entire condition with False if it contains NaN
+                    if key in condition:
+                        return False
                 else:
                     condition = condition.replace(key, str(value))
             
-            # Evaluate the condition
-            return eval(condition)
+            # Convert R-style operators to Python equivalents
+            condition = condition.replace("&", "and")
+            condition = condition.replace("|", "or")
+            
+            # Handle special cases for TRUE and FALSE
+            if condition.strip() == 'TRUE':
+                return True
+            elif condition.strip() == 'FALSE':
+                return False
+            
+            # Check if condition contains any NaN references that weren't caught above
+            if 'nan' in condition.lower():
+                return False
+            
+            # Evaluate the condition with safe context including math functions
+            safe_dict = {
+                'True': True,
+                'False': False,
+                'TRUE': True,
+                'FALSE': False,
+                'true': True,
+                'false': False,
+                'nan': float('nan'),
+                'float': float,
+                'int': int,
+                'abs': abs,
+                'min': min,
+                'max': max
+            }
+            return eval(condition, {"__builtins__": {}}, safe_dict)
         except Exception as e:
             print(f"Error evaluating condition '{condition}': {e}")
             return False
@@ -67,12 +106,13 @@ class RuleEngine:
                 if self.evaluate_condition(condition, mapped_data):
                     return score
             
-            # No condition matched
-            return None
+            # No condition matched - this should not happen if TRUE ~ 0 is present
+            # But if it does, return 0 as default (matching R's case_when behavior)
+            return 0.0
             
         except Exception as e:
             print(f"Error executing rule '{rule.name}': {e}")
-            return None
+            return 0.0
     
     def test_rule(self, rule: Rule, sample_data: Dict[str, Any]) -> Dict[str, Any]:
         """Test a rule on sample data and return detailed results"""

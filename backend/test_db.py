@@ -3,7 +3,7 @@ import os
 sys.path.append('.')
 
 # Set environment variable for SQLite
-os.environ['DATABASE_URL'] = 'sqlite:///./rubrics.db'
+os.environ['DATABASE_URL'] = 'sqlite:///./backend/rubrics.db'
 
 from app.models.database import SessionLocal
 from app.models.rule import Rule

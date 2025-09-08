@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Float
+from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Float, Boolean, JSON
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 import uuid
@@ -10,7 +10,8 @@ class Dataset(Base):
     id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    owner_name = Column(String(255))
+    owner_name = Column(String(255))  # Keep for backward compatibility
+    owner_id = Column(String(32), ForeignKey("users.id"))  # New user relationship
     organization = Column(String(255))
     disease_area_study = Column(String(255))  # DAS
     tags = Column(String(500))  # Comma-separated tags for SQLite compatibility
@@ -31,8 +32,15 @@ class Dataset(Base):
     created_date = Column(DateTime, default=datetime.utcnow)
     modified_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Admin control attributes
+    visibility = Column(String(20), default="public")  # "public", "private", "hidden"
+    enabled = Column(Boolean, default=True)  # Whether the dataset is enabled for use
+    
     # Relationships
     columns = relationship("DatasetColumn", back_populates="dataset", cascade="all, delete-orphan")
+    histograms = relationship("DatasetHistogram", back_populates="dataset", cascade="all, delete-orphan")
+    owner_user = relationship("User", back_populates="owned_datasets", foreign_keys=[owner_id])
+    analysis_results = relationship("AnalysisResult", back_populates="dataset", cascade="all, delete-orphan")
 
 class DatasetColumn(Base):
     __tablename__ = "dataset_columns"
@@ -64,3 +72,29 @@ class DatasetColumn(Base):
     
     # Relationships
     dataset = relationship("Dataset", back_populates="columns")
+    histograms = relationship("DatasetHistogram", back_populates="column", cascade="all, delete-orphan")
+
+class DatasetHistogram(Base):
+    __tablename__ = "dataset_histograms"
+    
+    id = Column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
+    dataset_id = Column(String(32), ForeignKey("datasets.id"), nullable=False)
+    column_id = Column(String(32), ForeignKey("dataset_columns.id"), nullable=False)
+    
+    # Histogram configuration
+    bin_count = Column(Integer, nullable=False)  # Number of bins used
+    bin_edges = Column(JSON, nullable=False)  # Array of bin edge values
+    bin_counts = Column(JSON, nullable=False)  # Array of counts for each bin
+    
+    # Histogram metadata
+    min_value = Column(Float, nullable=False)  # Minimum value in the data
+    max_value = Column(Float, nullable=False)  # Maximum value in the data
+    total_count = Column(Integer, nullable=False)  # Total number of non-null values
+    null_count = Column(Integer, default=0)  # Number of null/NaN values
+    
+    # Timestamps
+    created_date = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    dataset = relationship("Dataset", back_populates="histograms")
+    column = relationship("DatasetColumn", back_populates="histograms")
