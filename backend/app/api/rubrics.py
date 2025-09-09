@@ -512,12 +512,24 @@ async def admin_update_rubric(rubric_id: str, admin_update: RubricAdminUpdate, d
     return rubric
 
 @router.post("/{rubric_id}/clone", response_model=RubricResponse)
-async def clone_rubric(rubric_id: str, new_name: str, db: Session = Depends(get_db)):
-    """Clone an existing rubric with a new name and ID, including all its rules"""
+async def clone_rubric(rubric_id: str, request: dict, db: Session = Depends(get_db)):
+    """Clone an existing rubric with a new name and ID
+    
+    Options for rules:
+    - copy_rules=True: Create copies of all rules (default)
+    - copy_rules=False: Share the same rules between rubrics
+    """
     # Find the original rubric
     original_rubric = db.query(Rubric).filter(Rubric.id == rubric_id, Rubric.is_active == True).first()
     if not original_rubric:
         raise HTTPException(status_code=404, detail="Rubric not found")
+    
+    # Extract parameters from request body
+    new_name = request.get('new_name')
+    copy_rules = request.get('copy_rules', True)  # Default to copying rules
+    
+    if not new_name:
+        raise HTTPException(status_code=400, detail="new_name is required in request body")
     
     # Check if a rubric with the new name already exists
     existing_rubric = db.query(Rubric).filter(Rubric.name == new_name, Rubric.is_active == True).first()
@@ -550,41 +562,53 @@ async def clone_rubric(rubric_id: str, new_name: str, db: Session = Depends(get_
     db.add(cloned_rubric)
     db.flush()  # Flush to get the new rubric ID
     
-    # Clone each rule and add it to the new rubric
-    for rubric_rule in rubric_rules:
-        # Get the original rule
-        original_rule = db.query(Rule).filter(Rule.id == rubric_rule.rule_id, Rule.is_active == True).first()
-        if not original_rule:
-            continue  # Skip if rule doesn't exist
-        
-        # Create a new rule with the same data but new ID
-        cloned_rule_data = {
-            'name': f"{original_rule.name} (Copy)",
-            'description': original_rule.description,
-            'owner_name': original_rule.owner_name,
-            'owner_id': original_rule.owner_id,
-            'organization': original_rule.organization,
-            'disease_area_study': original_rule.disease_area_study,
-            'tags': original_rule.tags.copy() if original_rule.tags else [],
-            'ruleset_conditions': original_rule.ruleset_conditions.copy() if original_rule.ruleset_conditions else [],
-            'column_mapping': original_rule.column_mapping.copy() if original_rule.column_mapping else {},
-            'weight': original_rule.weight,
-            'visibility': original_rule.visibility,
-            'enabled': original_rule.enabled
-        }
-        
-        cloned_rule = Rule(**cloned_rule_data)
-        db.add(cloned_rule)
-        db.flush()  # Flush to get the new rule ID
-        
-        # Create the rubric-rule association
-        new_rubric_rule = RubricRule(
-            rubric_id=cloned_rubric.id,
-            rule_id=cloned_rule.id,
-            weight=rubric_rule.weight,
-            order_index=rubric_rule.order_index
-        )
-        db.add(new_rubric_rule)
+    if copy_rules:
+        # Clone each rule and add it to the new rubric
+        for rubric_rule in rubric_rules:
+            # Get the original rule
+            original_rule = db.query(Rule).filter(Rule.id == rubric_rule.rule_id, Rule.is_active == True).first()
+            if not original_rule:
+                continue  # Skip if rule doesn't exist
+            
+            # Create a new rule with the same data but new ID
+            cloned_rule_data = {
+                'name': f"{original_rule.name} (Copy)",
+                'description': original_rule.description,
+                'owner_name': original_rule.owner_name,
+                'owner_id': original_rule.owner_id,
+                'organization': original_rule.organization,
+                'disease_area_study': original_rule.disease_area_study,
+                'tags': original_rule.tags.copy() if original_rule.tags else [],
+                'ruleset_conditions': original_rule.ruleset_conditions.copy() if original_rule.ruleset_conditions else [],
+                'column_mapping': original_rule.column_mapping.copy() if original_rule.column_mapping else {},
+                'weight': original_rule.weight,
+                'visibility': original_rule.visibility,
+                'enabled': original_rule.enabled
+            }
+            
+            cloned_rule = Rule(**cloned_rule_data)
+            db.add(cloned_rule)
+            db.flush()  # Flush to get the new rule ID
+            
+            # Create the rubric-rule association
+            new_rubric_rule = RubricRule(
+                rubric_id=cloned_rubric.id,
+                rule_id=cloned_rule.id,
+                weight=rubric_rule.weight,
+                order_index=rubric_rule.order_index
+            )
+            db.add(new_rubric_rule)
+    else:
+        # Share the same rules between rubrics
+        for rubric_rule in rubric_rules:
+            # Create new rubric-rule association with the same rule ID
+            new_rubric_rule = RubricRule(
+                rubric_id=cloned_rubric.id,
+                rule_id=rubric_rule.rule_id,
+                weight=rubric_rule.weight,
+                order_index=rubric_rule.order_index
+            )
+            db.add(new_rubric_rule)
     
     db.commit()
     db.refresh(cloned_rubric)

@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from enum import Enum
+
+class DatasetType(str, Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+    ANNOTATIONS = "annotations"
+    RUBRIC = "rubric"
 
 class DatasetColumnCreate(BaseModel):
     original_name: str = Field(..., min_length=1, max_length=255)
@@ -54,6 +61,7 @@ class DatasetCreate(BaseModel):
     organization: Optional[str] = None
     disease_area_study: Optional[str] = None
     tags: Optional[str] = None  # Comma-separated tags
+    dataset_type: DatasetType = Field(default=DatasetType.INPUT)
     visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
     enabled: bool = True
 
@@ -66,6 +74,7 @@ class DatasetUpload(BaseModel):
     disease_area_study: Optional[str] = None
     tags: Optional[str] = None
     filename: str = Field(..., min_length=1)
+    dataset_type: DatasetType = Field(default=DatasetType.INPUT)
     visibility: str = Field(default="public", pattern="^(public|private|hidden)$")
     enabled: bool = True
 
@@ -90,7 +99,8 @@ class DatasetResponse(BaseModel):
     num_string_columns: int
     num_score_columns: int
     
-    # Timestamps
+    # Dataset type and timestamps
+    dataset_type: DatasetType
     created_date: datetime
     modified_date: datetime
     
@@ -119,6 +129,7 @@ class DatasetSummary(BaseModel):
     num_numeric_columns: int
     num_string_columns: int
     num_score_columns: int
+    dataset_type: DatasetType
     created_date: datetime
     modified_date: datetime
     visibility: str
@@ -145,6 +156,7 @@ class DatasetAnalysisRequest(BaseModel):
 
 class DatasetAdminUpdate(BaseModel):
     """Schema for admin updates to dataset visibility and enabled status"""
+    dataset_type: Optional[DatasetType] = None
     visibility: Optional[str] = Field(None, pattern="^(public|private|hidden)$")
     enabled: Optional[bool] = None
 

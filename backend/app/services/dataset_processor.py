@@ -246,6 +246,7 @@ class DatasetProcessor:
             organization=dataset_info.organization,
             disease_area_study=dataset_info.disease_area_study,
             tags=dataset_info.tags,
+            dataset_type=dataset_info.dataset_type,
             original_filename=file_path.name,
             file_path=str(file_path),
             pickled_path=str(pickled_path),
@@ -347,3 +348,79 @@ class DatasetProcessor:
         except Exception as e:
             print(f"Error cleaning up dataset files: {e}")
             return False
+    
+    def validate_annotation_dataset(self, db: Session, annotation_dataset_id: str, target_dataset_id: str) -> Dict[str, Any]:
+        """
+        Validate that an annotation dataset has at least one join column with a target dataset.
+        This is required for annotation datasets to be used in analysis.
+        """
+        # Get columns from both datasets
+        annotation_columns = db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == annotation_dataset_id
+        ).all()
+        
+        target_columns = db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == target_dataset_id
+        ).all()
+        
+        # Get sanitized column names
+        annotation_col_names = {col.sanitized_name for col in annotation_columns}
+        target_col_names = {col.sanitized_name for col in target_columns}
+        
+        # Find common columns (potential join columns)
+        common_columns = annotation_col_names.intersection(target_col_names)
+        
+        # Check if there are any common columns
+        has_join_columns = len(common_columns) > 0
+        
+        return {
+            'is_valid': has_join_columns,
+            'common_columns': list(common_columns),
+            'annotation_columns': list(annotation_col_names),
+            'target_columns': list(target_col_names),
+            'join_column_count': len(common_columns)
+        }
+    
+    def get_joinable_datasets(self, db: Session, dataset_id: str, dataset_type: str = None) -> List[Dict[str, Any]]:
+        """
+        Get all datasets that can be joined with the given dataset based on common columns.
+        Optionally filter by dataset type.
+        """
+        # Get columns from the source dataset
+        source_columns = db.query(DatasetColumn).filter(
+            DatasetColumn.dataset_id == dataset_id
+        ).all()
+        
+        source_col_names = {col.sanitized_name for col in source_columns}
+        
+        # Query for other datasets
+        query = db.query(Dataset).filter(Dataset.id != dataset_id)
+        
+        if dataset_type:
+            query = query.filter(Dataset.dataset_type == dataset_type)
+        
+        other_datasets = query.all()
+        
+        joinable_datasets = []
+        
+        for dataset in other_datasets:
+            # Get columns for this dataset
+            other_columns = db.query(DatasetColumn).filter(
+                DatasetColumn.dataset_id == dataset.id
+            ).all()
+            
+            other_col_names = {col.sanitized_name for col in other_columns}
+            
+            # Find common columns
+            common_columns = source_col_names.intersection(other_col_names)
+            
+            if common_columns:
+                joinable_datasets.append({
+                    'dataset_id': dataset.id,
+                    'dataset_name': dataset.name,
+                    'dataset_type': dataset.dataset_type,
+                    'common_columns': list(common_columns),
+                    'join_column_count': len(common_columns)
+                })
+        
+        return joinable_datasets

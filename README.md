@@ -12,6 +12,8 @@ A full-stack genomics data analysis application that enables researchers to crea
 - **Collaborative Research**: Share and organize rules and rubrics by organization and disease area
 - **Reproducible Analysis**: Export analysis configurations as YAML for reproducibility and debugging
 - **Standalone Execution**: Independent analysis execution script for batch processing and testing
+- **Quick Analysis**: Streamlined one-page analysis interface with on-the-fly rubric creation
+- **Modal Workflows**: Create rubrics and upload datasets without leaving the analysis page
 
 ## Tech Stack
 
@@ -218,7 +220,29 @@ Upload Excel files with genomic data:
 - Data columns (numeric/categorical)
 - Annotation columns (gene descriptions, etc.)
 
-### 4. Run Analysis
+### 4. Quick Analysis (New!)
+
+For streamlined analysis without project setup, use the Quick Analysis page:
+
+#### Quick Analysis Workflow
+1. **Navigate to Quick Analysis**: Click "Start Analysis" from the main dashboard or go to `/run`
+2. **Upload Dataset**: Upload your Excel file directly or select an existing dataset
+3. **Create or Select Rubric**: 
+   - Use the "Create New" button to create a rubric via modal
+   - Upload rubric rules from TSV/CSV/Excel/JSON files
+   - Or select an existing rubric from the list
+4. **Validate Configuration**: System automatically validates rubric-dataset compatibility
+5. **Run Analysis**: Execute analysis with immediate results display
+
+#### Quick Analysis Features
+- **No Project Setup Required**: Automatic default project creation
+- **Modal Rubric Creation**: Create rubrics without leaving the analysis page
+- **On-the-fly Dataset Upload**: Upload and validate datasets during analysis
+- **Full Width Layout**: Optimized interface using entire screen width
+- **Auto-Selection**: Newly created rubrics are automatically selected
+- **Real-time Validation**: Immediate feedback on configuration compatibility
+
+### 5. Run Analysis
 
 Execute rules and rubrics on your data using the enhanced analysis system:
 
@@ -240,7 +264,7 @@ Execute rules and rubrics on your data using the enhanced analysis system:
 - **Analysis Results**: `GET /api/analysis/results/{execution_id}`
 - **Result Database**: Separate `rubric_result.db` for scalable storage
 
-### 5. Export and Reproduce Analysis
+### 6. Export and Reproduce Analysis
 
 #### YAML Configuration Export
 1. **Navigate to Analysis Page**: Go to `/projects/[id]/analysis`

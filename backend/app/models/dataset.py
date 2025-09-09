@@ -1,8 +1,15 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Float, Boolean, JSON
+from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Float, Boolean, JSON, Enum
 from sqlalchemy.orm import relationship
 from app.models.database import Base
 import uuid
 from datetime import datetime
+import enum
+
+class DatasetType(enum.Enum):
+    INPUT = "input"
+    OUTPUT = "output"
+    ANNOTATIONS = "annotations"
+    RUBRIC = "rubric"
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -32,7 +39,8 @@ class Dataset(Base):
     created_date = Column(DateTime, default=datetime.utcnow)
     modified_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Admin control attributes
+    # Dataset type and admin control attributes
+    dataset_type = Column(String(20), default="input", nullable=False)
     visibility = Column(String(20), default="public")  # "public", "private", "hidden"
     enabled = Column(Boolean, default=True)  # Whether the dataset is enabled for use
     

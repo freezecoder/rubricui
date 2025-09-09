@@ -146,12 +146,17 @@ async def admin_update_rule(rule_id: str, admin_update: RuleAdminUpdate, db: Ses
     return rule
 
 @router.post("/{rule_id}/clone", response_model=RuleResponse)
-async def clone_rule(rule_id: str, new_name: str, db: Session = Depends(get_db)):
+async def clone_rule(rule_id: str, request: dict, db: Session = Depends(get_db)):
     """Clone an existing rule with a new name and ID"""
     # Find the original rule
     original_rule = db.query(Rule).filter(Rule.id == rule_id, Rule.is_active == True).first()
     if not original_rule:
         raise HTTPException(status_code=404, detail="Rule not found")
+    
+    # Extract new_name from request body
+    new_name = request.get('new_name')
+    if not new_name:
+        raise HTTPException(status_code=400, detail="new_name is required in request body")
     
     # Check if a rule with the new name already exists
     existing_rule = db.query(Rule).filter(Rule.name == new_name, Rule.is_active == True).first()

@@ -9,7 +9,7 @@ import uuid
 
 from app.models.database import SessionLocal, engine, Base
 from app.models.result_database import ResultSessionLocal, result_engine, ResultBase
-from app.api import rules, rubrics, projects, analysis, datasets, rubric_validate, users, view_permissions, analysis_results, result_analysis_results, result_cache
+from app.api import rules, rubrics, projects, analysis, datasets, rubric_validate, users, view_permissions, analysis_results, result_analysis_results, result_cache, omics_view
 from app.services.file_processor import FileProcessor
 
 # Import all models to ensure they're registered with Base metadata
@@ -58,6 +58,7 @@ app.include_router(view_permissions.router, prefix="/api/view-permissions", tags
 app.include_router(result_analysis_results.router, prefix="/api/analysis-results", tags=["analysis-results"])
 app.include_router(result_analysis_results.router, prefix="/api/result-analysis", tags=["result-analysis"])
 app.include_router(result_cache.router, prefix="/api/result-cache", tags=["result-cache"])
+app.include_router(omics_view.router, tags=["omics-view"])
 
 @app.get("/")
 async def root():

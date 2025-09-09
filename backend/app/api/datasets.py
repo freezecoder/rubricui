@@ -11,7 +11,7 @@ from app.schemas.dataset import (
     DatasetCreate, DatasetResponse, DatasetSummary, DatasetStats,
     DatasetColumnResponse, DatasetAnalysisRequest, DatasetAdminUpdate,
     DatasetHistogramResponse, DatasetHistogramSummary, DatasetHistogramWithColumn,
-    DatasetHistogramRequest
+    DatasetHistogramRequest, DatasetType
 )
 from app.services.dataset_processor import DatasetProcessor
 
@@ -28,6 +28,7 @@ async def create_dataset(
     organization: Optional[str] = Form(None),
     disease_area_study: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
+    dataset_type: DatasetType = Form(DatasetType.INPUT),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -63,7 +64,8 @@ async def create_dataset(
         owner_name=owner_name,
         organization=organization,
         disease_area_study=disease_area_study,
-        tags=tags
+        tags=tags,
+        dataset_type=dataset_type
     )
     
     try:
@@ -106,6 +108,7 @@ async def list_datasets(
     owner_name: Optional[str] = Query(None),
     disease_area_study: Optional[str] = Query(None),
     tags: Optional[str] = Query(None),
+    dataset_type: Optional[DatasetType] = Query(None, description="Filter by dataset type: input, output, annotations, rubric"),
     visibility: Optional[str] = Query(None, description="Filter by visibility: public, private, hidden"),
     enabled: Optional[bool] = Query(None, description="Filter by enabled status"),
     admin_view: bool = Query(False, description="Include all datasets regardless of visibility (admin only)"),
@@ -136,6 +139,8 @@ async def list_datasets(
     if tags:
         # Search for tags in comma-separated string
         query = query.filter(Dataset.tags.ilike(f"%{tags}%"))
+    if dataset_type:
+        query = query.filter(Dataset.dataset_type == dataset_type)
     
     # Apply pagination and ordering
     datasets = query.order_by(Dataset.created_date.desc()).offset(skip).limit(limit).all()
@@ -468,3 +473,87 @@ async def delete_all_histograms(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting histograms: {str(e)}")
+
+# Dataset type and join validation endpoints
+
+@router.get("/{dataset_id}/joinable")
+async def get_joinable_datasets(
+    dataset_id: str,
+    dataset_type: Optional[DatasetType] = Query(None, description="Filter joinable datasets by type"),
+    db: Session = Depends(get_db)
+):
+    """Get all datasets that can be joined with the given dataset based on common columns"""
+    
+    # Verify dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    joinable_datasets = dataset_processor.get_joinable_datasets(
+        db, dataset_id, dataset_type.value if dataset_type else None
+    )
+    
+    return {
+        "source_dataset_id": dataset_id,
+        "source_dataset_name": dataset.name,
+        "joinable_datasets": joinable_datasets,
+        "total_joinable": len(joinable_datasets)
+    }
+
+@router.post("/{annotation_dataset_id}/validate-join/{target_dataset_id}")
+async def validate_annotation_join(
+    annotation_dataset_id: str,
+    target_dataset_id: str,
+    db: Session = Depends(get_db)
+):
+    """Validate that an annotation dataset can be joined with a target dataset"""
+    
+    # Verify both datasets exist
+    annotation_dataset = db.query(Dataset).filter(Dataset.id == annotation_dataset_id).first()
+    target_dataset = db.query(Dataset).filter(Dataset.id == target_dataset_id).first()
+    
+    if not annotation_dataset:
+        raise HTTPException(status_code=404, detail="Annotation dataset not found")
+    if not target_dataset:
+        raise HTTPException(status_code=404, detail="Target dataset not found")
+    
+    # Validate the join
+    validation_result = dataset_processor.validate_annotation_dataset(
+        db, annotation_dataset_id, target_dataset_id
+    )
+    
+    return {
+        "annotation_dataset_id": annotation_dataset_id,
+        "annotation_dataset_name": annotation_dataset.name,
+        "target_dataset_id": target_dataset_id,
+        "target_dataset_name": target_dataset.name,
+        "validation_result": validation_result
+    }
+
+@router.get("/metadata/types")
+async def get_dataset_types():
+    """Get all available dataset types with descriptions"""
+    return {
+        "dataset_types": [
+            {
+                "value": "input",
+                "label": "Input Dataset",
+                "description": "Primary datasets used for analysis (e.g., gene expression data)"
+            },
+            {
+                "value": "output", 
+                "label": "Output Dataset",
+                "description": "Results from analysis or processing (e.g., scored results)"
+            },
+            {
+                "value": "annotations",
+                "label": "Annotation Dataset", 
+                "description": "Supplementary data that can be joined with input datasets (e.g., gene annotations)"
+            },
+            {
+                "value": "rubric",
+                "label": "Rubric Dataset",
+                "description": "Datasets containing rubric definitions or scoring rules"
+            }
+        ]
+    }
