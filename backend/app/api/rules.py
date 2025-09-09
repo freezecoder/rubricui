@@ -145,6 +145,43 @@ async def admin_update_rule(rule_id: str, admin_update: RuleAdminUpdate, db: Ses
     db.refresh(rule)
     return rule
 
+@router.post("/{rule_id}/clone", response_model=RuleResponse)
+async def clone_rule(rule_id: str, new_name: str, db: Session = Depends(get_db)):
+    """Clone an existing rule with a new name and ID"""
+    # Find the original rule
+    original_rule = db.query(Rule).filter(Rule.id == rule_id, Rule.is_active == True).first()
+    if not original_rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    # Check if a rule with the new name already exists
+    existing_rule = db.query(Rule).filter(Rule.name == new_name, Rule.is_active == True).first()
+    if existing_rule:
+        raise HTTPException(status_code=400, detail=f"A rule with the name '{new_name}' already exists")
+    
+    # Create a new rule with the same data but new ID and name
+    cloned_rule_data = {
+        'name': new_name,
+        'description': original_rule.description,
+        'owner_name': original_rule.owner_name,
+        'owner_id': original_rule.owner_id,
+        'organization': original_rule.organization,
+        'disease_area_study': original_rule.disease_area_study,
+        'tags': original_rule.tags.copy() if original_rule.tags else [],
+        'ruleset_conditions': original_rule.ruleset_conditions.copy() if original_rule.ruleset_conditions else [],
+        'column_mapping': original_rule.column_mapping.copy() if original_rule.column_mapping else {},
+        'weight': original_rule.weight,
+        'visibility': original_rule.visibility,
+        'enabled': original_rule.enabled
+    }
+    
+    # Create the cloned rule
+    cloned_rule = Rule(**cloned_rule_data)
+    db.add(cloned_rule)
+    db.commit()
+    db.refresh(cloned_rule)
+    
+    return cloned_rule
+
 @router.post("/{rule_id}/test")
 async def test_rule(rule_id: str, sample_data: dict, db: Session = Depends(get_db)):
     rule = db.query(Rule).filter(Rule.id == rule_id, Rule.is_active == True).first()

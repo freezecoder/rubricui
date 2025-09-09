@@ -106,7 +106,78 @@ class ResultCacheService:
         except Exception as e:
             raise Exception(f"Failed to create result cache: {str(e)}")
     
-    def _calculate_score_statistics(self, df: pd.DataFrame, score_columns: List[str]) -> Dict[str, Any]:
+    def _calculate_score_statistics_with_original_data(self, df: pd.DataFrame, score_columns: List[str], original_df: pd.DataFrame) -> Dict[str, Any]:
+        """Calculate score statistics using original dataset for valid percentage calculation"""
+        stats = {}
+        
+        # Get rule information to map score columns to their input columns
+        from app.models.database import get_db
+        from app.models.rule import Rule
+        
+        db = next(get_db())
+        rules = db.query(Rule).filter(Rule.is_active == True).all()
+        rule_mapping = {rule.name: rule for rule in rules}
+        
+        for col in score_columns:
+            if col not in df.columns:
+                continue
+                
+            # Get valid (non-null) values from processed results
+            valid_values = df[col].dropna()
+            total_rows = len(df)
+            valid_count = len(valid_values)
+            
+            # Calculate valid percentage based on rule's input columns
+            valid_percentage = 100.0  # Default to 100%
+            null_count = 0
+            null_percentage = 0.0
+            
+            if col.endswith('_SCORE'):
+                rule_name = col.replace('_SCORE', '')
+                if rule_name in rule_mapping:
+                    rule = rule_mapping[rule_name]
+                    if rule.column_mapping:
+                        # Get the columns this rule depends on
+                        input_columns = list(rule.column_mapping.values())
+                        available_input_columns = [col for col in input_columns if col in original_df.columns]
+                        
+                        if available_input_columns:
+                            # Calculate valid percentage based on rows where ALL input columns are non-null
+                            valid_rows = original_df[available_input_columns].notna().all(axis=1)
+                            original_valid_count = int(valid_rows.sum())
+                            original_total_rows = len(original_df)
+                            valid_percentage = round((original_valid_count / original_total_rows) * 100, 2)
+                            null_count = original_total_rows - original_valid_count
+                            null_percentage = round((null_count / original_total_rows) * 100, 2)
+            
+            if valid_count == 0:
+                stats[col] = {
+                    "count": 0,
+                    "valid_percentage": valid_percentage,
+                    "min": None,
+                    "max": None,
+                    "mean": None,
+                    "median": None,
+                    "std": None,
+                    "null_count": null_count,
+                    "null_percentage": null_percentage
+                }
+            else:
+                stats[col] = {
+                    "count": valid_count,
+                    "valid_percentage": valid_percentage,
+                    "min": float(valid_values.min()),
+                    "max": float(valid_values.max()),
+                    "mean": float(valid_values.mean()),
+                    "median": float(valid_values.median()),
+                    "std": float(valid_values.std()) if len(valid_values) > 1 else 0.0,
+                    "null_count": null_count,
+                    "null_percentage": null_percentage
+                }
+        
+        return stats
+
+    def _calculate_score_statistics(self, df: pd.DataFrame, score_columns: List[str], original_df: pd.DataFrame = None) -> Dict[str, Any]:
         """Calculate comprehensive score statistics for all score columns"""
         stats = {}
         
@@ -114,34 +185,65 @@ class ResultCacheService:
             if col not in df.columns:
                 continue
                 
-            # Get valid (non-null) values
+            # Get valid (non-null) values from processed results
             valid_values = df[col].dropna()
             total_rows = len(df)
             valid_count = len(valid_values)
             
+            # Calculate valid percentage based on original data if available
+            if original_df is not None:
+                # Map processed column name to original column name
+                original_col = None
+                if col.endswith('_SCORE'):
+                    # Try to find matching original column
+                    rule_name = col.replace('_SCORE', '')
+                    # Look for columns that start with SCORE_ and contain the rule name
+                    for orig_col in original_df.columns:
+                        if orig_col.startswith('SCORE_') and rule_name in orig_col:
+                            original_col = orig_col
+                            break
+                
+                if original_col and original_col in original_df.columns:
+                    # Use original data for valid percentage calculation
+                    original_valid_count = original_df[original_col].notna().sum()
+                    original_total_rows = len(original_df)
+                    valid_percentage = round((original_valid_count / original_total_rows) * 100, 2)
+                    null_count = original_total_rows - original_valid_count
+                    null_percentage = round((null_count / original_total_rows) * 100, 2)
+                else:
+                    # Fallback to processed data
+                    valid_percentage = round((valid_count / total_rows) * 100, 2)
+                    null_count = total_rows - valid_count
+                    null_percentage = round((null_count / total_rows) * 100, 2)
+            else:
+                # Use processed data
+                valid_percentage = round((valid_count / total_rows) * 100, 2)
+                null_count = total_rows - valid_count
+                null_percentage = round((null_count / total_rows) * 100, 2)
+            
             if valid_count == 0:
                 stats[col] = {
                     "count": 0,
-                    "valid_percentage": 0.0,
+                    "valid_percentage": valid_percentage,
                     "min": None,
                     "max": None,
                     "mean": None,
                     "median": None,
                     "std": None,
-                    "null_count": total_rows,
-                    "null_percentage": 100.0
+                    "null_count": null_count,
+                    "null_percentage": null_percentage
                 }
             else:
                 stats[col] = {
                     "count": valid_count,
-                    "valid_percentage": round((valid_count / total_rows) * 100, 2),
+                    "valid_percentage": valid_percentage,
                     "min": float(valid_values.min()),
                     "max": float(valid_values.max()),
                     "mean": float(valid_values.mean()),
                     "median": float(valid_values.median()),
                     "std": float(valid_values.std()) if len(valid_values) > 1 else 0.0,
-                    "null_count": total_rows - valid_count,
-                    "null_percentage": round(((total_rows - valid_count) / total_rows) * 100, 2)
+                    "null_count": null_count,
+                    "null_percentage": null_percentage
                 }
         
         return stats

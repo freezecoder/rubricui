@@ -148,6 +148,63 @@ async def list_cached_analyses(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing cached analyses: {str(e)}")
 
+@router.post("/{analysis_id}/recalculate-statistics")
+async def recalculate_statistics_with_original_data(
+    analysis_id: str,
+    cache_service: ResultCacheService = Depends(lambda: ResultCacheService())
+):
+    """Recalculate score statistics using original dataset for accurate valid percentages"""
+    try:
+        # Load the cached results
+        cached_df = cache_service.load_result_cache(analysis_id)
+        if cached_df is None:
+            raise HTTPException(status_code=404, detail="Cached analysis not found")
+        
+        # Load the original dataset
+        from app.services.dataset_processor import DatasetProcessor
+        from app.models.result_analysis_result import AnalysisResult
+        from app.models.result_database import get_result_db
+        
+        # Get analysis result to find dataset
+        result_db = next(get_result_db())
+        analysis_result = result_db.query(AnalysisResult).filter(
+            AnalysisResult.id == analysis_id
+        ).first()
+        
+        if not analysis_result:
+            raise HTTPException(status_code=404, detail="Analysis result not found")
+        
+        # Load original dataset
+        dataset_processor = DatasetProcessor()
+        original_df = dataset_processor.load_dataset(analysis_result.dataset_id)
+        
+        # Get score columns from cached data
+        score_columns = [col for col in cached_df.columns if col.endswith('_SCORE')]
+        
+        # Recalculate statistics using original data
+        corrected_stats = cache_service._calculate_score_statistics_with_original_data(
+            cached_df, score_columns, original_df
+        )
+        
+        # Save corrected statistics
+        stats_filename = f"stats_{analysis_id}.json"
+        stats_path = cache_service.cache_dir / stats_filename
+        
+        import json
+        with open(stats_path, 'w') as f:
+            json.dump(corrected_stats, f, indent=2)
+        
+        return {
+            "success": True,
+            "analysis_id": analysis_id,
+            "corrected_statistics": corrected_stats,
+            "message": "Statistics recalculated using original dataset"
+        }
+        
+    except Exception as e:
+        print(f"Error recalculating statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error recalculating statistics: {str(e)}")
+
 @router.delete("/{analysis_id}")
 async def delete_cached_analysis(
     analysis_id: str,
@@ -206,6 +263,8 @@ async def get_cached_analysis_summary(
                     return value
                 
                 summary["score_distribution"][score_name] = {
+                    "count": score_stats.get("count", 0),
+                    "valid_percentage": clean_stat_value(score_stats.get("valid_percentage")),
                     "min": clean_stat_value(score_stats.get("min")),
                     "max": clean_stat_value(score_stats.get("max")),
                     "mean": clean_stat_value(score_stats.get("mean")),

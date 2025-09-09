@@ -406,12 +406,13 @@ class ResultAnalysisService:
                 scores = df[total_score_col].dropna()
                 if len(scores) > 0:
                     score_distribution[total_score_col] = {
+                        "count": len(scores),
+                        "valid_percentage": round((len(scores) / len(df)) * 100, 2),
                         "min": float(scores.min()),
                         "max": float(scores.max()),
                         "mean": float(scores.mean()),
                         "median": float(scores.median()),
-                        "std": float(scores.std()),
-                        "count": len(scores)
+                        "std": float(scores.std())
                     }
             
             # Add individual rule scores to distribution
@@ -420,12 +421,13 @@ class ResultAnalysisService:
                     scores = df[col].dropna()
                     if len(scores) > 0:
                         score_distribution[col] = {
+                            "count": len(scores),
+                            "valid_percentage": round((len(scores) / len(df)) * 100, 2),
                             "min": float(scores.min()),
                             "max": float(scores.max()),
                             "mean": float(scores.mean()),
                             "median": float(scores.median()),
-                            "std": float(scores.std()),
-                            "count": len(scores)
+                            "std": float(scores.std())
                         }
             
             return AnalysisSummaryResponse(

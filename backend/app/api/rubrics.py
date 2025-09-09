@@ -511,6 +511,86 @@ async def admin_update_rubric(rubric_id: str, admin_update: RubricAdminUpdate, d
     db.refresh(rubric)
     return rubric
 
+@router.post("/{rubric_id}/clone", response_model=RubricResponse)
+async def clone_rubric(rubric_id: str, new_name: str, db: Session = Depends(get_db)):
+    """Clone an existing rubric with a new name and ID, including all its rules"""
+    # Find the original rubric
+    original_rubric = db.query(Rubric).filter(Rubric.id == rubric_id, Rubric.is_active == True).first()
+    if not original_rubric:
+        raise HTTPException(status_code=404, detail="Rubric not found")
+    
+    # Check if a rubric with the new name already exists
+    existing_rubric = db.query(Rubric).filter(Rubric.name == new_name, Rubric.is_active == True).first()
+    if existing_rubric:
+        raise HTTPException(status_code=400, detail=f"A rubric with the name '{new_name}' already exists")
+    
+    # Get all rules associated with the original rubric
+    rubric_rules = db.query(RubricRule).filter(
+        RubricRule.rubric_id == rubric_id,
+        RubricRule.is_active == True
+    ).order_by(RubricRule.order_index).all()
+    
+    if not rubric_rules:
+        raise HTTPException(status_code=400, detail="Cannot clone rubric: no rules found in original rubric")
+    
+    # Create the new rubric
+    cloned_rubric_data = {
+        'name': new_name,
+        'description': original_rubric.description,
+        'owner_name': original_rubric.owner_name,
+        'owner_id': original_rubric.owner_id,
+        'organization': original_rubric.organization,
+        'disease_area_study': original_rubric.disease_area_study,
+        'tags': original_rubric.tags.copy() if original_rubric.tags else [],
+        'visibility': original_rubric.visibility,
+        'enabled': original_rubric.enabled
+    }
+    
+    cloned_rubric = Rubric(**cloned_rubric_data)
+    db.add(cloned_rubric)
+    db.flush()  # Flush to get the new rubric ID
+    
+    # Clone each rule and add it to the new rubric
+    for rubric_rule in rubric_rules:
+        # Get the original rule
+        original_rule = db.query(Rule).filter(Rule.id == rubric_rule.rule_id, Rule.is_active == True).first()
+        if not original_rule:
+            continue  # Skip if rule doesn't exist
+        
+        # Create a new rule with the same data but new ID
+        cloned_rule_data = {
+            'name': f"{original_rule.name} (Copy)",
+            'description': original_rule.description,
+            'owner_name': original_rule.owner_name,
+            'owner_id': original_rule.owner_id,
+            'organization': original_rule.organization,
+            'disease_area_study': original_rule.disease_area_study,
+            'tags': original_rule.tags.copy() if original_rule.tags else [],
+            'ruleset_conditions': original_rule.ruleset_conditions.copy() if original_rule.ruleset_conditions else [],
+            'column_mapping': original_rule.column_mapping.copy() if original_rule.column_mapping else {},
+            'weight': original_rule.weight,
+            'visibility': original_rule.visibility,
+            'enabled': original_rule.enabled
+        }
+        
+        cloned_rule = Rule(**cloned_rule_data)
+        db.add(cloned_rule)
+        db.flush()  # Flush to get the new rule ID
+        
+        # Create the rubric-rule association
+        new_rubric_rule = RubricRule(
+            rubric_id=cloned_rubric.id,
+            rule_id=cloned_rule.id,
+            weight=rubric_rule.weight,
+            order_index=rubric_rule.order_index
+        )
+        db.add(new_rubric_rule)
+    
+    db.commit()
+    db.refresh(cloned_rubric)
+    
+    return cloned_rubric
+
 @router.delete("/{rubric_id}/rules/{rule_id}")
 async def remove_rule_from_rubric(rubric_id: str, rule_id: str, db: Session = Depends(get_db)):
     rubric_rule = db.query(RubricRule).filter(
