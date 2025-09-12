@@ -54,6 +54,10 @@ npm --version   # Should show 10.x.x or higher
 
 If you are extending the `quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard` base image, add the following instructions to your Dockerfile to install the required dependencies:
 
+**Important Note**: The `/mnt/apps/` directory is a Domino-specific mount point that only becomes available after the container is running. During the Docker build process, we clone the application from GitHub to `/app/targetminer-rubrics` and build it there. At runtime, Domino will mount your workspace to `/mnt/apps/targetminer-rubrics`, and you can optionally copy or symlink the built application there if needed.
+
+**Required Files**: The Dockerfile assumes that the nginx configuration files (`nginx-configs/targetminer-rubrics.conf`) are present in the repository. Make sure these files exist in your GitHub repository before building the Docker image.
+
 ```dockerfile
 # Extend the Domino standard environment
 FROM quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard
@@ -64,6 +68,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     git \
     build-essential \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 # Install NVM (Node Version Manager)
@@ -84,11 +89,11 @@ RUN . "$NVM_DIR/nvm.sh" && \
 RUN node --version && npm --version && echo "Node.js and npm versions verified" && \
     echo "Expected: Node.js v18.20.4, npm 10.x.x"
 
-# Set working directory
-WORKDIR /mnt/apps/targetminer-rubrics
+# Clone the application from GitHub (Targetminer Rubrics repository)
+RUN git clone https://github.com/freezecoder/rubricui.git /app/targetminer-rubrics
 
-# Copy application files
-COPY . .
+# Set working directory
+WORKDIR /app/targetminer-rubrics
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
@@ -105,6 +110,11 @@ RUN cd frontend && \
 # Create necessary directories
 RUN mkdir -p logs scripts nginx-configs
 
+# Copy nginx configuration
+COPY nginx-configs/targetminer-rubrics.conf /etc/nginx/sites-available/
+RUN ln -sf /etc/nginx/sites-available/targetminer-rubrics.conf /etc/nginx/sites-enabled/ && \
+    rm -f /etc/nginx/sites-enabled/default
+
 # Set permissions
 RUN chmod +x scripts/*.sh
 
@@ -112,7 +122,35 @@ RUN chmod +x scripts/*.sh
 EXPOSE 80 8000 3001
 
 # Default command
-CMD ["/mnt/apps/targetminer-rubrics/scripts/start_app.sh"]
+CMD ["/app/targetminer-rubrics/scripts/start_app.sh"]
+```
+
+### Domino Runtime Considerations
+
+When running in Domino, you may want to add a startup script that handles the mount point:
+
+```dockerfile
+# Add a startup script for Domino runtime
+RUN echo '#!/bin/bash\n\
+# Start nginx\n\
+echo "Starting nginx..."\n\
+nginx -t && nginx\n\
+\n\
+# Check if /mnt/apps/targetminer-rubrics exists (Domino mount point)\n\
+if [ -d "/mnt/apps/targetminer-rubrics" ]; then\n\
+    echo "Domino mount point detected, copying application..."\n\
+    cp -r /app/targetminer-rubrics/* /mnt/apps/targetminer-rubrics/\n\
+    cd /mnt/apps/targetminer-rubrics\n\
+else\n\
+    echo "Using built-in application directory..."\n\
+    cd /app/targetminer-rubrics\n\
+fi\n\
+# Start the application\n\
+exec ./scripts/start_app.sh' > /usr/local/bin/domino-start.sh && \
+    chmod +x /usr/local/bin/domino-start.sh
+
+# Use the Domino-aware startup script
+CMD ["/usr/local/bin/domino-start.sh"]
 ```
 
 ### Alternative Dockerfile with Multi-stage Build
@@ -143,11 +181,12 @@ RUN . "$NVM_DIR/nvm.sh" && \
     npm install -g npm@latest && \
     echo "Node.js 18.20.4 and npm installed for build stage"
 
+# Clone the application from GitHub (Targetminer Rubrics repository)
+RUN git clone https://github.com/freezecoder/rubricui.git /app/targetminer-rubrics
+
 # Build frontend (Next.js 15.5.2)
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
+WORKDIR /app/targetminer-rubrics/frontend
 RUN npm ci --only=production
-COPY frontend/ ./
 RUN npm run build && echo "Frontend build completed in build stage"
 
 # Production stage
@@ -172,38 +211,41 @@ RUN . "$NVM_DIR/nvm.sh" && \
     nvm alias default 18.20.4 && \
     echo "Node.js 18.20.4 installed for runtime stage"
 
-# Copy built frontend from builder stage
-COPY --from=builder /app/frontend/.next /mnt/apps/targetminer-rubrics/frontend/.next
-COPY --from=builder /app/frontend/public /mnt/apps/targetminer-rubrics/frontend/public
-COPY --from=builder /app/frontend/package*.json /mnt/apps/targetminer-rubrics/frontend/
+# Clone the application from GitHub (Targetminer Rubrics repository)
+RUN git clone https://github.com/freezecoder/rubricui.git /app/targetminer-rubrics
 
-# Copy backend and other files
-COPY backend/ /mnt/apps/targetminer-rubrics/backend/
-COPY scripts/ /mnt/apps/targetminer-rubrics/scripts/
-COPY nginx-configs/ /mnt/apps/targetminer-rubrics/nginx-configs/
+# Copy built frontend from builder stage
+COPY --from=builder /app/targetminer-rubrics/frontend/.next /app/targetminer-rubrics/frontend/.next
+COPY --from=builder /app/targetminer-rubrics/frontend/public /app/targetminer-rubrics/frontend/public
+COPY --from=builder /app/targetminer-rubrics/frontend/package*.json /app/targetminer-rubrics/frontend/
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install -r /mnt/apps/targetminer-rubrics/backend/requirements.txt && \
+    pip install -r /app/targetminer-rubrics/backend/requirements.txt && \
     pip install gunicorn
 
 # Install frontend runtime dependencies
-RUN cd /mnt/apps/targetminer-rubrics/frontend && npm ci --only=production
+RUN cd /app/targetminer-rubrics/frontend && npm ci --only=production
+
+# Copy nginx configuration
+COPY --from=builder /app/targetminer-rubrics/nginx-configs/targetminer-rubrics.conf /etc/nginx/sites-available/
+RUN ln -sf /etc/nginx/sites-available/targetminer-rubrics.conf /etc/nginx/sites-enabled/ && \
+    rm -f /etc/nginx/sites-enabled/default
 
 # Create necessary directories
-RUN mkdir -p /mnt/apps/targetminer-rubrics/logs
+RUN mkdir -p /app/targetminer-rubrics/logs
 
 # Set permissions
-RUN chmod +x /mnt/apps/targetminer-rubrics/scripts/*.sh
+RUN chmod +x /app/targetminer-rubrics/scripts/*.sh
 
 # Expose ports
 EXPOSE 80 8000 3001
 
 # Set working directory
-WORKDIR /mnt/apps/targetminer-rubrics
+WORKDIR /app/targetminer-rubrics
 
 # Default command
-CMD ["/mnt/apps/targetminer-rubrics/scripts/start_app.sh"]
+CMD ["/app/targetminer-rubrics/scripts/start_app.sh"]
 ```
 
 ## System Requirements
