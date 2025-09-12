@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: allow frontend lib directory
+!frontend/src/lib/
 parts/
 sdist/
 var/
