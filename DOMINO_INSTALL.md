@@ -5,25 +5,206 @@ This guide provides step-by-step instructions for deploying the Targetminer Rubr
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [System Requirements](#system-requirements)
-3. [Installation Overview](#installation-overview)
-4. [Step 1: Environment Setup](#step-1-environment-setup)
-5. [Step 2: Backend Installation](#step-2-backend-installation)
-6. [Step 3: Frontend Installation](#step-3-frontend-installation)
-7. [Step 4: Nginx Configuration](#step-4-nginx-configuration)
-8. [Step 5: Application Startup Script](#step-5-application-startup-script)
-9. [Step 6: Service Management](#step-6-service-management)
-10. [Step 7: Verification and Testing](#step-7-verification-and-testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Maintenance and Updates](#maintenance-and-updates)
+2. [Dockerfile Instructions for Domino Environment](#dockerfile-instructions-for-domino-environment)
+3. [System Requirements](#system-requirements)
+4. [Installation Overview](#installation-overview)
+5. [Step 1: Environment Setup](#step-1-environment-setup)
+6. [Step 2: Backend Installation](#step-2-backend-installation)
+7. [Step 3: Frontend Installation](#step-3-frontend-installation)
+8. [Step 4: Nginx Configuration](#step-4-nginx-configuration)
+9. [Step 5: Application Startup Script](#step-5-application-startup-script)
+10. [Step 6: Service Management](#step-6-service-management)
+11. [Step 7: Verification and Testing](#step-7-verification-and-testing)
+12. [Troubleshooting](#troubleshooting)
+13. [Maintenance and Updates](#maintenance-and-updates)
 
 ## Prerequisites
 
 - Domino ODSL environment with sudo access
 - Python 3.11+ installed
-- Node.js 18+ and npm installed
+- **Node.js 18+ and npm installed** (Next.js 15.5.2 requires Node.js 18+)
 - nginx installed and configured
 - Basic knowledge of Linux system administration
+
+### Node.js Version Check and Upgrade
+
+Before proceeding, verify your Node.js version:
+```bash
+node --version
+```
+
+If you have Node.js version 12 or older, you must upgrade to Node.js 18+:
+
+```bash
+# Install NVM (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+
+# Install and use Node.js 18 LTS (required for Next.js 15.5.2)
+nvm install 18.20.4
+nvm use 18.20.4
+nvm alias default 18.20.4
+
+# Verify installation
+node --version  # Should show v18.20.4 or higher
+npm --version   # Should show 10.x.x or higher
+```
+
+## Dockerfile Instructions for Domino Environment
+
+If you are extending the `quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard` base image, add the following instructions to your Dockerfile to install the required dependencies:
+
+```dockerfile
+# Extend the Domino standard environment
+FROM quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install NVM (Node Version Manager)
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# Set up NVM environment
+ENV NVM_DIR="/root/.nvm"
+ENV PATH="$NVM_DIR/versions/node/v18.20.4/bin:$PATH"
+
+# Install Node.js 18.20.4 LTS and npm (required for Next.js 15.5.2)
+RUN . "$NVM_DIR/nvm.sh" && \
+    nvm install 18.20.4 && \
+    nvm use 18.20.4 && \
+    nvm alias default 18.20.4 && \
+    npm install -g npm@latest
+
+# Verify installations
+RUN node --version && npm --version && echo "Node.js and npm versions verified" && \
+    echo "Expected: Node.js v18.20.4, npm 10.x.x"
+
+# Set working directory
+WORKDIR /mnt/apps/targetminer-rubrics
+
+# Copy application files
+COPY . .
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r backend/requirements.txt && \
+    pip install gunicorn
+
+# Install Node.js dependencies and build frontend (Next.js 15.5.2)
+RUN cd frontend && \
+    npm install && \
+    npx next --version && \
+    npm run build && \
+    echo "Frontend build completed successfully with Next.js 15.5.2"
+
+# Create necessary directories
+RUN mkdir -p logs scripts nginx-configs
+
+# Set permissions
+RUN chmod +x scripts/*.sh
+
+# Expose ports
+EXPOSE 80 8000 3001
+
+# Default command
+CMD ["/mnt/apps/targetminer-rubrics/scripts/start_app.sh"]
+```
+
+### Alternative Dockerfile with Multi-stage Build
+
+For a more optimized production build, you can use a multi-stage approach:
+
+```dockerfile
+# Build stage
+FROM quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install NVM and Node.js 18.20.4 (required for Next.js 15.5.2)
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+ENV NVM_DIR="/root/.nvm"
+ENV PATH="$NVM_DIR/versions/node/v18.20.4/bin:$PATH"
+
+RUN . "$NVM_DIR/nvm.sh" && \
+    nvm install 18.20.4 && \
+    nvm use 18.20.4 && \
+    nvm alias default 18.20.4 && \
+    npm install -g npm@latest && \
+    echo "Node.js 18.20.4 and npm installed for build stage"
+
+# Build frontend (Next.js 15.5.2)
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci --only=production
+COPY frontend/ ./
+RUN npm run build && echo "Frontend build completed in build stage"
+
+# Production stage
+FROM quay.io/domino/domino-standard-environment:ubuntu22-py3.10-r4.4-domino5.11-standard
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install NVM and Node.js 18.20.4 for runtime (required for Next.js 15.5.2)
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+ENV NVM_DIR="/root/.nvm"
+ENV PATH="$NVM_DIR/versions/node/v18.20.4/bin:$PATH"
+
+RUN . "$NVM_DIR/nvm.sh" && \
+    nvm install 18.20.4 && \
+    nvm use 18.20.4 && \
+    nvm alias default 18.20.4 && \
+    echo "Node.js 18.20.4 installed for runtime stage"
+
+# Copy built frontend from builder stage
+COPY --from=builder /app/frontend/.next /mnt/apps/targetminer-rubrics/frontend/.next
+COPY --from=builder /app/frontend/public /mnt/apps/targetminer-rubrics/frontend/public
+COPY --from=builder /app/frontend/package*.json /mnt/apps/targetminer-rubrics/frontend/
+
+# Copy backend and other files
+COPY backend/ /mnt/apps/targetminer-rubrics/backend/
+COPY scripts/ /mnt/apps/targetminer-rubrics/scripts/
+COPY nginx-configs/ /mnt/apps/targetminer-rubrics/nginx-configs/
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r /mnt/apps/targetminer-rubrics/backend/requirements.txt && \
+    pip install gunicorn
+
+# Install frontend runtime dependencies
+RUN cd /mnt/apps/targetminer-rubrics/frontend && npm ci --only=production
+
+# Create necessary directories
+RUN mkdir -p /mnt/apps/targetminer-rubrics/logs
+
+# Set permissions
+RUN chmod +x /mnt/apps/targetminer-rubrics/scripts/*.sh
+
+# Expose ports
+EXPOSE 80 8000 3001
+
+# Set working directory
+WORKDIR /mnt/apps/targetminer-rubrics
+
+# Default command
+CMD ["/mnt/apps/targetminer-rubrics/scripts/start_app.sh"]
+```
 
 ## System Requirements
 
@@ -55,9 +236,9 @@ The installation process involves:
 
 ```bash
 # Create main application directory
-sudo mkdir -p /opt/targetminer-rubrics
-sudo chown $USER:$USER /opt/targetminer-rubrics
-cd /opt/targetminer-rubrics
+sudo mkdir -p /mnt/apps/targetminer-rubrics
+sudo chown $USER:$USER /mnt/apps/targetminer-rubrics
+cd /mnt/apps/targetminer-rubrics
 
 # Create subdirectories
 mkdir -p {backend,frontend,logs,scripts,nginx-configs}
@@ -70,7 +251,7 @@ mkdir -p {backend,frontend,logs,scripts,nginx-configs}
 git clone <your-repository-url> .
 
 # Or if you have the code locally, copy it
-# cp -r /path/to/your/targetminer-rubrics/* /opt/targetminer-rubrics/
+# cp -r /path/to/your/targetminer-rubrics/* /mnt/apps/targetminer-rubrics/
 ```
 
 ### 1.3 Set Up Environment Variables
@@ -104,7 +285,7 @@ EOF
 ### 2.1 Install Python Dependencies
 
 ```bash
-cd /opt/targetminer-rubrics/backend
+cd /mnt/apps/targetminer-rubrics/backend
 
 # Create virtual environment
 python3 -m venv venv
@@ -139,13 +320,13 @@ python scripts/create_admin_user.py
 ### 2.3 Create Backend Startup Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/start_backend.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/start_backend.sh << 'EOF'
 #!/bin/bash
 
 # Backend startup script for Targetminer Rubrics
 set -e
 
-APP_DIR="/opt/targetminer-rubrics"
+APP_DIR="/mnt/apps/targetminer-rubrics"
 BACKEND_DIR="$APP_DIR/backend"
 LOG_DIR="$APP_DIR/logs"
 PID_FILE="$LOG_DIR/backend.pid"
@@ -179,19 +360,19 @@ gunicorn app.main:app \
 echo "Backend started successfully. PID: $(cat $PID_FILE)"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/start_backend.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/start_backend.sh
 ```
 
 ### 2.4 Create Backend Stop Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/stop_backend.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/stop_backend.sh << 'EOF'
 #!/bin/bash
 
 # Backend stop script for Targetminer Rubrics
 set -e
 
-LOG_DIR="/opt/targetminer-rubrics/logs"
+LOG_DIR="/mnt/apps/targetminer-rubrics/logs"
 PID_FILE="$LOG_DIR/backend.pid"
 
 if [ -f "$PID_FILE" ]; then
@@ -219,7 +400,7 @@ else
 fi
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/stop_backend.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/stop_backend.sh
 ```
 
 ## Step 3: Frontend Installation
@@ -227,25 +408,61 @@ chmod +x /opt/targetminer-rubrics/scripts/stop_backend.sh
 ### 3.1 Install Node.js Dependencies
 
 ```bash
-cd /opt/targetminer-rubrics/frontend
+cd /mnt/apps/targetminer-rubrics/frontend
 
-# Install dependencies
+# Check Node.js and npm versions
+node --version
+npm --version
+
+# Clean install dependencies
+rm -rf node_modules package-lock.json
+npm cache clean --force
 npm install
+
+# Verify Next.js is installed and check version
+ls -la node_modules/.bin/next
+npx next --version  # Should show 15.5.2
 
 # Build the application for production
 npm run build
 ```
 
+#### Troubleshooting Frontend Build Issues
+
+If you encounter "next: not found" errors:
+
+```bash
+# Option 1: Use npx to run next
+npx next build --turbopack
+
+# Option 2: Install Next.js globally
+npm install -g next@15.5.2
+npm run build
+
+# Option 3: Use yarn instead of npm
+npm install -g yarn
+yarn install
+yarn build
+
+# Option 4: Check Node.js version (requires Node.js 18+ for Next.js 15.5.2)
+node --version
+# If version is too old, install nvm and use Node.js 18.20.4
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+nvm install 18.20.4
+nvm use 18.20.4
+```
+
 ### 3.2 Create Frontend Startup Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/start_frontend.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/start_frontend.sh << 'EOF'
 #!/bin/bash
 
 # Frontend startup script for Targetminer Rubrics
 set -e
 
-APP_DIR="/opt/targetminer-rubrics"
+APP_DIR="/mnt/apps/targetminer-rubrics"
 FRONTEND_DIR="$APP_DIR/frontend"
 LOG_DIR="$APP_DIR/logs"
 PID_FILE="$LOG_DIR/frontend.pid"
@@ -269,19 +486,19 @@ echo $! > "$PID_FILE"
 echo "Frontend started successfully. PID: $(cat $PID_FILE)"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/start_frontend.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/start_frontend.sh
 ```
 
 ### 3.3 Create Frontend Stop Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/stop_frontend.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/stop_frontend.sh << 'EOF'
 #!/bin/bash
 
 # Frontend stop script for Targetminer Rubrics
 set -e
 
-LOG_DIR="/opt/targetminer-rubrics/logs"
+LOG_DIR="/mnt/apps/targetminer-rubrics/logs"
 PID_FILE="$LOG_DIR/frontend.pid"
 
 if [ -f "$PID_FILE" ]; then
@@ -309,7 +526,7 @@ else
 fi
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/stop_frontend.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/stop_frontend.sh
 ```
 
 ## Step 4: Nginx Configuration
@@ -330,7 +547,7 @@ sudo dnf install nginx
 ### 4.2 Create Nginx Configuration
 
 ```bash
-cat > /opt/targetminer-rubrics/nginx-configs/targetminer-rubrics.conf << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/nginx-configs/targetminer-rubrics.conf << 'EOF'
 # Targetminer Rubrics Nginx Configuration
 server {
     listen 80;
@@ -423,7 +640,7 @@ server {
 #     ssl_session_timeout 10m;
 #     
 #     # Include the same location blocks as above
-#     include /opt/targetminer-rubrics/nginx-configs/targetminer-rubrics-locations.conf;
+#     include /mnt/apps/targetminer-rubrics/nginx-configs/targetminer-rubrics-locations.conf;
 # }
 EOF
 ```
@@ -431,7 +648,7 @@ EOF
 ### 4.3 Create Location Configuration (for HTTPS)
 
 ```bash
-cat > /opt/targetminer-rubrics/nginx-configs/targetminer-rubrics-locations.conf << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/nginx-configs/targetminer-rubrics-locations.conf << 'EOF'
 # Location blocks for HTTPS configuration
 # Include this file in your HTTPS server block
 
@@ -506,7 +723,7 @@ EOF
 
 ```bash
 # Copy configuration to nginx sites-available
-sudo cp /opt/targetminer-rubrics/nginx-configs/targetminer-rubrics.conf /etc/nginx/sites-available/
+sudo cp /mnt/apps/targetminer-rubrics/nginx-configs/targetminer-rubrics.conf /etc/nginx/sites-available/
 
 # Create symbolic link to sites-enabled
 sudo ln -sf /etc/nginx/sites-available/targetminer-rubrics.conf /etc/nginx/sites-enabled/
@@ -526,13 +743,13 @@ sudo systemctl reload nginx
 ### 5.1 Create Master Startup Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/start_app.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/start_app.sh << 'EOF'
 #!/bin/bash
 
 # Master startup script for Targetminer Rubrics
 set -e
 
-APP_DIR="/opt/targetminer-rubrics"
+APP_DIR="/mnt/apps/targetminer-rubrics"
 SCRIPTS_DIR="$APP_DIR/scripts"
 LOG_DIR="$APP_DIR/logs"
 
@@ -632,19 +849,19 @@ echo ""
 echo "To stop the application, run: $SCRIPTS_DIR/stop_app.sh"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/start_app.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/start_app.sh
 ```
 
 ### 5.2 Create Master Stop Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/stop_app.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/stop_app.sh << 'EOF'
 #!/bin/bash
 
 # Master stop script for Targetminer Rubrics
 set -e
 
-APP_DIR="/opt/targetminer-rubrics"
+APP_DIR="/mnt/apps/targetminer-rubrics"
 SCRIPTS_DIR="$APP_DIR/scripts"
 
 # Colors for output
@@ -679,19 +896,19 @@ print_status "Stopping backend service..."
 print_success "Targetminer Rubrics Application stopped successfully!"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/stop_app.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/stop_app.sh
 ```
 
 ### 5.3 Create Status Check Script
 
 ```bash
-cat > /opt/targetminer-rubrics/scripts/status_app.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/status_app.sh << 'EOF'
 #!/bin/bash
 
 # Status check script for Targetminer Rubrics
 set -e
 
-APP_DIR="/opt/targetminer-rubrics"
+APP_DIR="/mnt/apps/targetminer-rubrics"
 LOG_DIR="$APP_DIR/logs"
 
 # Colors for output
@@ -805,7 +1022,7 @@ echo "  Frontend: $LOG_DIR/frontend.log"
 echo "  Nginx: /var/log/nginx/access.log, /var/log/nginx/error.log"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/status_app.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/status_app.sh
 ```
 
 ## Step 6: Service Management
@@ -824,11 +1041,11 @@ Wants=nginx.service
 Type=forking
 User=root
 Group=root
-WorkingDirectory=/opt/targetminer-rubrics
-ExecStart=/opt/targetminer-rubrics/scripts/start_app.sh
-ExecStop=/opt/targetminer-rubrics/scripts/stop_app.sh
-ExecReload=/opt/targetminer-rubrics/scripts/stop_app.sh && /opt/targetminer-rubrics/scripts/start_app.sh
-PIDFile=/opt/targetminer-rubrics/logs/backend.pid
+WorkingDirectory=/mnt/apps/targetminer-rubrics
+ExecStart=/mnt/apps/targetminer-rubrics/scripts/start_app.sh
+ExecStop=/mnt/apps/targetminer-rubrics/scripts/stop_app.sh
+ExecReload=/mnt/apps/targetminer-rubrics/scripts/stop_app.sh && /mnt/apps/targetminer-rubrics/scripts/start_app.sh
+PIDFile=/mnt/apps/targetminer-rubrics/logs/backend.pid
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -847,7 +1064,7 @@ sudo systemctl enable targetminer-rubrics.service
 
 ```bash
 # Create service management script
-cat > /opt/targetminer-rubrics/scripts/manage_service.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/manage_service.sh << 'EOF'
 #!/bin/bash
 
 # Service management script for Targetminer Rubrics
@@ -900,7 +1117,7 @@ case "$1" in
 esac
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/manage_service.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/manage_service.sh
 ```
 
 ## Step 7: Verification and Testing
@@ -909,10 +1126,10 @@ chmod +x /opt/targetminer-rubrics/scripts/manage_service.sh
 
 ```bash
 # Start the application
-/opt/targetminer-rubrics/scripts/start_app.sh
+/mnt/apps/targetminer-rubrics/scripts/start_app.sh
 
 # Check status
-/opt/targetminer-rubrics/scripts/status_app.sh
+/mnt/apps/targetminer-rubrics/scripts/status_app.sh
 
 # Test endpoints
 curl -s http://localhost/health | jq .
@@ -930,8 +1147,8 @@ systemctl status targetminer-rubrics
 netstat -tlnp | grep -E ':(80|8000|3001)'
 
 # Check logs
-tail -f /opt/targetminer-rubrics/logs/backend_error.log
-tail -f /opt/targetminer-rubrics/logs/frontend.log
+tail -f /mnt/apps/targetminer-rubrics/logs/backend_error.log
+tail -f /mnt/apps/targetminer-rubrics/logs/frontend.log
 tail -f /var/log/nginx/error.log
 ```
 
@@ -958,24 +1175,24 @@ sudo lsof -i :3001
 sudo kill -9 <PID>
 
 # Or use the kill_port script
-/opt/targetminer-rubrics/scripts/kill_port.sh 8000
+/mnt/apps/targetminer-rubrics/scripts/kill_port.sh 8000
 ```
 
 #### 2. Permission Issues
 
 ```bash
 # Fix ownership
-sudo chown -R $USER:$USER /opt/targetminer-rubrics
+sudo chown -R $USER:$USER /mnt/apps/targetminer-rubrics
 
 # Fix permissions
-chmod +x /opt/targetminer-rubrics/scripts/*.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/*.sh
 ```
 
 #### 3. Database Issues
 
 ```bash
 # Reinitialize database
-cd /opt/targetminer-rubrics/backend
+cd /mnt/apps/targetminer-rubrics/backend
 source venv/bin/activate
 python scripts/init_db.py
 python scripts/load_example_data.py
@@ -998,7 +1215,7 @@ sudo systemctl reload nginx
 
 ```bash
 # Rebuild frontend
-cd /opt/targetminer-rubrics/frontend
+cd /mnt/apps/targetminer-rubrics/frontend
 rm -rf .next
 npm run build
 ```
@@ -1007,7 +1224,7 @@ npm run build
 
 ```bash
 # Reinstall backend dependencies
-cd /opt/targetminer-rubrics/backend
+cd /mnt/apps/targetminer-rubrics/backend
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -1017,11 +1234,11 @@ pip install -r requirements.txt
 
 ```bash
 # Backend logs
-tail -f /opt/targetminer-rubrics/logs/backend_error.log
-tail -f /opt/targetminer-rubrics/logs/backend_access.log
+tail -f /mnt/apps/targetminer-rubrics/logs/backend_error.log
+tail -f /mnt/apps/targetminer-rubrics/logs/backend_access.log
 
 # Frontend logs
-tail -f /opt/targetminer-rubrics/logs/frontend.log
+tail -f /mnt/apps/targetminer-rubrics/logs/frontend.log
 
 # Nginx logs
 sudo tail -f /var/log/nginx/access.log
@@ -1037,13 +1254,13 @@ sudo journalctl -u targetminer-rubrics -f
 
 ```bash
 # Stop the application
-/opt/targetminer-rubrics/scripts/stop_app.sh
+/mnt/apps/targetminer-rubrics/scripts/stop_app.sh
 
 # Backup current installation
-sudo cp -r /opt/targetminer-rubrics /opt/targetminer-rubrics.backup.$(date +%Y%m%d)
+sudo cp -r /mnt/apps/targetminer-rubrics /mnt/apps/targetminer-rubrics.backup.$(date +%Y%m%d)
 
 # Update code
-cd /opt/targetminer-rubrics
+cd /mnt/apps/targetminer-rubrics
 git pull origin main
 
 # Update backend dependencies
@@ -1058,31 +1275,31 @@ npm install
 npm run build
 
 # Start the application
-/opt/targetminer-rubrics/scripts/start_app.sh
+/mnt/apps/targetminer-rubrics/scripts/start_app.sh
 ```
 
 ### 2. Database Backups
 
 ```bash
 # Create backup script
-cat > /opt/targetminer-rubrics/scripts/backup_db.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/backup_db.sh << 'EOF'
 #!/bin/bash
 
-BACKUP_DIR="/opt/targetminer-rubrics/backups"
+BACKUP_DIR="/mnt/apps/targetminer-rubrics/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 mkdir -p "$BACKUP_DIR"
 
 # Backup main database
-cp /opt/targetminer-rubrics/backend/rubrics.db "$BACKUP_DIR/rubrics_$DATE.db"
+cp /mnt/apps/targetminer-rubrics/backend/rubrics.db "$BACKUP_DIR/rubrics_$DATE.db"
 
 # Backup result database
-cp /opt/targetminer-rubrics/backend/rubric_result.db "$BACKUP_DIR/rubric_result_$DATE.db"
+cp /mnt/apps/targetminer-rubrics/backend/rubric_result.db "$BACKUP_DIR/rubric_result_$DATE.db"
 
 echo "Database backup completed: $BACKUP_DIR/*_$DATE.db"
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/backup_db.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/backup_db.sh
 ```
 
 ### 3. Log Rotation
@@ -1090,7 +1307,7 @@ chmod +x /opt/targetminer-rubrics/scripts/backup_db.sh
 ```bash
 # Create logrotate configuration
 sudo tee /etc/logrotate.d/targetminer-rubrics > /dev/null << 'EOF'
-/opt/targetminer-rubrics/logs/*.log {
+/mnt/apps/targetminer-rubrics/logs/*.log {
     daily
     missingok
     rotate 30
@@ -1099,8 +1316,8 @@ sudo tee /etc/logrotate.d/targetminer-rubrics > /dev/null << 'EOF'
     notifempty
     create 644 root root
     postrotate
-        /opt/targetminer-rubrics/scripts/stop_app.sh
-        /opt/targetminer-rubrics/scripts/start_app.sh
+        /mnt/apps/targetminer-rubrics/scripts/stop_app.sh
+        /mnt/apps/targetminer-rubrics/scripts/start_app.sh
     endscript
 }
 EOF
@@ -1110,11 +1327,11 @@ EOF
 
 ```bash
 # Create monitoring script
-cat > /opt/targetminer-rubrics/scripts/monitor.sh << 'EOF'
+cat > /mnt/apps/targetminer-rubrics/scripts/monitor.sh << 'EOF'
 #!/bin/bash
 
 # Simple monitoring script for Targetminer Rubrics
-LOG_FILE="/opt/targetminer-rubrics/logs/monitor.log"
+LOG_FILE="/mnt/apps/targetminer-rubrics/logs/monitor.log"
 
 check_service() {
     local service_name=$1
@@ -1144,10 +1361,10 @@ if ! systemctl is-active --quiet nginx; then
 fi
 EOF
 
-chmod +x /opt/targetminer-rubrics/scripts/monitor.sh
+chmod +x /mnt/apps/targetminer-rubrics/scripts/monitor.sh
 
 # Add to crontab for regular monitoring
-(crontab -l 2>/dev/null; echo "*/5 * * * * /opt/targetminer-rubrics/scripts/monitor.sh") | crontab -
+(crontab -l 2>/dev/null; echo "*/5 * * * * /mnt/apps/targetminer-rubrics/scripts/monitor.sh") | crontab -
 ```
 
 ## Security Considerations
@@ -1197,4 +1414,4 @@ Key features of this setup:
 - **Easy maintenance** and update procedures
 - **Production-ready configuration** with security considerations
 
-For support or issues, refer to the troubleshooting section or check the application logs in `/opt/targetminer-rubrics/logs/`.
+For support or issues, refer to the troubleshooting section or check the application logs in `/mnt/apps/targetminer-rubrics/logs/`.
