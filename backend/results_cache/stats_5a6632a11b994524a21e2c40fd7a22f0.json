@@ -1,0 +1,134 @@
+{
+  "magnitude_expr_median_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 4.0,
+    "mean": 1.1001836359926545,
+    "median": 1.0,
+    "std": 1.4108050283008342,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "ChinaChoice_LUSC_TvsN_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.34753111609875537,
+    "median": 0.0,
+    "std": 0.9566236630089378,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "scrna_GSE127465_de_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.09207304631707815,
+    "median": 0.0,
+    "std": 0.450973890542922,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "scrna_GSE148071_de_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.09600081615996735,
+    "median": 0.0,
+    "std": 0.46096001263042913,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "logfc_pval_cptac_proteomics_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 5.0,
+    "mean": 0.09181799632728015,
+    "median": 0.0,
+    "std": 0.5769257493276361,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "logfc_pval_lusc_tumor_vs_norm_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 5.0,
+    "mean": 0.8179963272801469,
+    "median": 0.0,
+    "std": 1.2474451960720612,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "gtex_rank_diff_percentile_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.11053866557845338,
+    "median": 0.0,
+    "std": 0.5139220124761035,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "gtex_norm_expr_median_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": -2.0,
+    "max": 3.0,
+    "mean": 0.4457763721689451,
+    "median": 0.0,
+    "std": 1.7387288746250695,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "key_tissue_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": -2.0,
+    "max": 0.0,
+    "mean": -0.9657212813711488,
+    "median": 0.0,
+    "std": 0.999437803021235,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "sq_depmap_vs_otherlung_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.0009181799632728015,
+    "median": 0.0,
+    "std": 0.05247701695608225,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "sq_depmap_vs_solid_epithelial_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.008569679657212814,
+    "median": 0.0,
+    "std": 0.16011529377545508,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "LUSC Marker Agnostic_RUBRIC_SCORE": {
+    "count": 19604,
+    "valid_percentage": 100.0,
+    "min": -4.0,
+    "max": 29.0,
+    "mean": 2.1456845541726177,
+    "median": 1.0,
+    "std": 3.5604681396019533,
+    "null_count": 0,
+    "null_percentage": 0.0
+  }
+}

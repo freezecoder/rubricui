@@ -14,6 +14,8 @@ A full-stack genomics data analysis application that enables researchers to crea
 - **Standalone Execution**: Independent analysis execution script for batch processing and testing
 - **Quick Analysis**: Streamlined one-page analysis interface with on-the-fly rubric creation
 - **Modal Workflows**: Create rubrics and upload datasets without leaving the analysis page
+- **System Health Monitoring**: Real-time API health status indicator on the home page
+- **Secure Admin Panel**: Protected admin interface with secure authentication
 
 ## Tech Stack
 

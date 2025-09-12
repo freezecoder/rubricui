@@ -1,0 +1,178 @@
+{
+  "rudin_magnitude_expr_median_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 1.8469880143205522,
+    "median": 2.0,
+    "std": 0.9355465715938296,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "aster_magnitude_expr_median_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.6923156747781871,
+    "median": 0.0,
+    "std": 0.9732151748927276,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "aster_sclcA_gtex_rankdiff_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 8.0,
+    "mean": 0.13127172728687803,
+    "median": 0.0,
+    "std": 0.7703204888620168,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "logfc_pval_SCLC_rudin_tumor_vs_norm_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 5.0,
+    "mean": 0.4856535049032325,
+    "median": 0.0,
+    "std": 1.4807167045094662,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "aveExpr_evotek_proteomics_percentile_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 6.0,
+    "mean": 0.5342188553935557,
+    "median": 0.0,
+    "std": 1.4962538433582793,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "pepmedian_evotek_proteomics_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": -5.0,
+    "max": 0.0,
+    "mean": -0.16598350023348726,
+    "median": 0.0,
+    "std": 0.6389535692804252,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "pep_n_tumors_evotek_proteomics_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": -5.0,
+    "max": 8.0,
+    "mean": 1.6468634877808332,
+    "median": 0.0,
+    "std": 3.270753522684932,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "scrna_stat_diff_dll3_sez6_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 2.0,
+    "mean": 0.061848181393659524,
+    "median": 0.0,
+    "std": 0.34623313707761116,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "scrna_frac_positive_cluster_dll3_sez6_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 2.0,
+    "mean": 0.018990297307113577,
+    "median": 0.0,
+    "std": 0.19396369576624584,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "scrna_differential_fraction_dll3_sez6_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 2.0,
+    "mean": 0.007990452965288226,
+    "median": 0.0,
+    "std": 0.12616609888661945,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "gtex_normal_median_expression_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": -10.0,
+    "max": 3.0,
+    "mean": -1.414517719088881,
+    "median": 1.0,
+    "std": 5.072264306010377,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "key_tissue_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": -10.0,
+    "max": 0.0,
+    "mean": -4.913609713070098,
+    "median": 0.0,
+    "std": 4.99938331695288,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "SCLCvsNotSOLID_depmap_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.0453484148809215,
+    "median": 0.0,
+    "std": 0.2591582677667681,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "SCLCvsNotAL_depmap_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.031131634929694393,
+    "median": 0.0,
+    "std": 0.21263056924850357,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "SCLCvsNotEPITH_depmap_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": 0.0,
+    "max": 3.0,
+    "mean": 0.045037098531624555,
+    "median": 0.0,
+    "std": 0.2588118867013882,
+    "null_count": 0,
+    "null_percentage": 0.0
+  },
+  "SCLC Rubric_RUBRIC_SCORE": {
+    "count": 19273,
+    "valid_percentage": 100.0,
+    "min": -24.0,
+    "max": 36.0,
+    "mean": -0.9464535879209256,
+    "median": 0.0,
+    "std": 7.930526549633277,
+    "null_count": 0,
+    "null_percentage": 0.0
+  }
+}
