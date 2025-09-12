@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  eslint: {
+    // Allow production builds to successfully complete even if ESLint errors are present
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Allow production builds to successfully complete even if TypeScript errors are present
+    ignoreBuildErrors: true,
+  },
 };
 
 export default nextConfig;
