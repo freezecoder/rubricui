@@ -105,20 +105,14 @@ read_rubric_data<-function(rubricfile="Scoring_Rubric_HNSC_HPV_Negative_V0.6-CPM
   return(scoredat)
 }
 
-read_anchor_data<-function(rubricfile="/Users/zayed/Downloads/Scoring_Rubric_HNSC_HPV_Negative_Anchor_Partners_V0.5.1-CPM_results_tables.xlsx",genelim=10,sheetname="Summary",topN=30){
+read_anchor_data<-function(rubricfile="/Users/zayed/Downloads/Scoring_Rubric_HNSC_HPV_Negative_Anchor_Partners_V0.5.1-CPM_results_tables.xlsx",sheetname="Summary",topN=30){
   # Suppress warnings about column type guessing (some columns may have mixed types)
   # We need gene_symbol, gene2_name, and SCORE_ columns
   scoredat <- suppressWarnings({
     read_xlsx(rubricfile, sheet = sheetname)
   }) %>% dplyr::select(gene_symbol, gene2_name, contains("SCORE_")) %>%
-    group_by(gene_symbol) %>% slice_head(n=topN) 
-  
-  tgenes<-scoredat %>% pull(gene_symbol) %>% unique() %>% head(genelim)
-  
-  scoredat<- scoredat %>% filter(gene_symbol %in% tgenes) 
-  
-  
-  
+   group_by(gene_symbol) %>% slice_head(n=topN) 
+    
   return(scoredat)
 }
 

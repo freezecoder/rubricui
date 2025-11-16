@@ -5,6 +5,7 @@
 
 # Load required libraries
 suppressPackageStartupMessages({
+  library(optparse)
   library(limma)
   library(readr)
   library(writexl)
@@ -17,16 +18,93 @@ suppressPackageStartupMessages({
 # Configuration
 # ============================================================================
 
-# Define input file paths (assumes script is run from cptac directory)
-normal_file <- "cptac_normal.matrix.txt"
-tumor_file <- "cptac_tumor.matrix.txt"
+option_list <- list(
+  make_option(
+    c("-n", "--normal-file"),
+    type = "character",
+    default = "cptac_normal.matrix.txt",
+    help = "Path to the normal samples expression matrix [default: %default]"
+  ),
+  make_option(
+    c("-t", "--tumor-file"),
+    type = "character",
+    default = "cptac_tumor.matrix.txt",
+    help = "Path to the tumor samples expression matrix [default: %default]"
+  ),
+  make_option(
+    c("-c", "--output-csv"),
+    type = "character",
+    default = "cptac_limma_results.csv",
+    help = "Path to write the full limma results CSV [default: %default]"
+  ),
+  make_option(
+    c("-x", "--output-excel"),
+    type = "character",
+    default = "HNSC_CPTAC_Tumor_vs_Normal_limma_results.xlsx",
+    help = "Path to write the Excel workbook [default: %default]"
+  ),
+  make_option(
+    c("-r", "--output-rds"),
+    type = "character",
+    default = "cptac_limma_results.rds",
+    help = "Path to write the serialized RDS results [default: %default]"
+  ),
+  make_option(
+    c("-p", "--output-boxplot-pdf"),
+    type = "character",
+    default = "cptac_top30_degs_boxplots.pdf",
+    help = "Path to write the DEG boxplots PDF [default: %default]"
+  ),
+  make_option(
+    c("-q", "--output-qc-pdf"),
+    type = "character",
+    default = "rna_qc.pdf",
+    help = "Path to write the QC plots PDF [default: %default]"
+  ),
+  make_option(
+    c("-g", "--top-degs"),
+    type = "integer",
+    default = 30,
+    help = "Number of DEGs to include in boxplots [default: %default]"
+  ),
+  make_option(
+    c("-e", "--expression-file"),
+    type = "character",
+    default = NA,
+    help = "Path to a single expression matrix containing both normal and tumor samples"
+  ),
+  make_option(
+    c("-i", "--normal-ids-file"),
+    type = "character",
+    default = NA,
+    help = "Path to a text file listing normal sample IDs (one per line) when using --expression-file"
+  )
+)
 
-# Define output file paths
-output_csv <- "cptac_limma_results.csv"
-output_excel <- "HNSC_CPTAC_Tumor_vs_Normal_limma_results.xlsx"
-output_rds <- "cptac_limma_results.rds"
-output_pdf <- "cptac_top30_degs_boxplots.pdf"
-output_qc_pdf <- "rna_qc.pdf"
+opt_parser <- OptionParser(option_list = option_list)
+opt <- parse_args(opt_parser)
+
+normal_file <- opt$`normal-file`
+tumor_file <- opt$`tumor-file`
+output_csv <- opt$`output-csv`
+output_excel <- opt$`output-excel`
+output_rds <- opt$`output-rds`
+output_pdf <- opt$`output-boxplot-pdf`
+output_qc_pdf <- opt$`output-qc-pdf`
+top_deg_count <- opt$`top-degs`
+expression_file <- opt$`expression-file`
+normal_ids_file <- opt$`normal-ids-file`
+
+if (is.na(top_deg_count) || top_deg_count < 1) {
+  stop("Argument --top-degs must be a positive integer.")
+}
+
+load_sample_ids <- function(file_path) {
+  ids <- readLines(file_path, warn = FALSE)
+  ids <- trimws(ids)
+  ids <- ids[ids != ""]
+  unique(ids)
+}
 
 # ============================================================================
 # Function: Load expression matrix
@@ -666,9 +744,66 @@ cat("Tumor vs Normal (Normal as control)\n")
 cat("============================================================================\n")
 cat("\n")
 
-# Step 1: Load expression matrices
-normal_matrix <- load_expression_matrix(normal_file)
-tumor_matrix <- load_expression_matrix(tumor_file)
+has_expression_file <- !is.na(expression_file) && nzchar(expression_file)
+has_normal_ids_file <- !is.na(normal_ids_file) && nzchar(normal_ids_file)
+
+if (has_expression_file && !has_normal_ids_file) {
+  stop("Argument --normal-ids-file is required when --expression-file is provided.")
+}
+
+if (!has_expression_file && has_normal_ids_file) {
+  stop("Argument --expression-file is required when --normal-ids-file is provided.")
+}
+
+if (has_expression_file && has_normal_ids_file) {
+  cat("Loading combined expression matrix:", expression_file, "\n")
+  combined_expression <- load_expression_matrix(expression_file)
+  normal_sample_ids <- load_sample_ids(normal_ids_file)
+  
+  if (length(normal_sample_ids) == 0) {
+    stop("No normal sample IDs found in --normal-ids-file.")
+  }
+  
+  available_samples <- colnames(combined_expression)
+  matched_normals <- intersect(normal_sample_ids, available_samples)
+  missing_ids <- setdiff(normal_sample_ids, matched_normals)
+  
+  cat("Normal sample match summary: matched ", length(matched_normals), " / ",
+      length(normal_sample_ids), " requested IDs against ", length(available_samples),
+      " total samples.\n", sep = "")
+  
+  if (length(matched_normals) == 0) {
+    stop("No normal sample IDs from --normal-ids-file were found in the expression matrix.")
+  }
+  
+  if (length(missing_ids) > 0) {
+    warning(
+      "The following normal sample IDs were not found in the expression matrix and will be skipped: ",
+      paste(missing_ids, collapse = ", ")
+    )
+  }
+  
+  normal_columns <- matched_normals
+  tumor_columns <- setdiff(available_samples, normal_columns)
+  
+  if (length(normal_columns) == 0) {
+    stop("No normal samples identified in the combined expression matrix.")
+  }
+  
+  if (length(tumor_columns) == 0) {
+    stop("No tumor samples identified in the combined expression matrix.")
+  }
+  
+  normal_matrix <- combined_expression[, normal_columns, drop = FALSE]
+  tumor_matrix <- combined_expression[, tumor_columns, drop = FALSE]
+  
+  cat("Identified", length(normal_columns), "normal samples and", length(tumor_columns),
+      "tumor samples from combined expression matrix.\n")
+} else {
+  # Step 1: Load expression matrices
+  normal_matrix <- load_expression_matrix(normal_file)
+  tumor_matrix <- load_expression_matrix(tumor_file)
+}
 
 # Step 2: Prepare combined matrix
 combined_matrix <- prepare_combined_matrix(normal_matrix, tumor_matrix)
@@ -763,14 +898,14 @@ saveRDS(list(
 ), file = output_rds)
 
 # Create box plots for top 30 DEGs (prioritizing higher expression in tumor)
-cat("  Creating box plots for top 30 DEGs (higher expression in tumor)...\n")
+cat("  Creating box plots for top ", top_deg_count, " DEGs (higher expression in tumor)...\n", sep = "")
 create_degs_boxplots(
   expr_matrix = expr_normalized,
   group_factor = group,
   top_degs = top_degs,
-  n_genes = 30,
+  n_genes = top_deg_count,
   output_file = output_pdf,
-  title_prefix = "Top 30 DEGs (Higher Expression in Tumor)"
+  title_prefix = paste0("Top ", top_deg_count, " DEGs (Higher Expression in Tumor)")
 )
 
 # Create QC plots (volcano plot and other QC visualizations)
